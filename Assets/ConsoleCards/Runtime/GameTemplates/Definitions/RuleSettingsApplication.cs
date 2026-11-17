@@ -71,6 +71,28 @@ namespace ConsoleCards.GameTemplates.Definitions
         public const string FloorPlacementRandom = "random";
         public const string FloorPlacementPattern = "pattern";
 
+        /// <summary>
+        /// Stage 2 (owner, 2026-11-17): the players lay the floor out themselves ("by the players"); the game deals it
+        /// at random otherwise ("at random").
+        /// </summary>
+        public const string FloorPlacementPlayers = "by the players";
+
+        /// <summary>The floor placement value, read: random (also "at random"), pattern or players (also "by the players").</summary>
+        public static string ReadFloorPlacement(string value)
+        {
+            string v = (value ?? string.Empty).Trim();
+            if (v.Equals(FloorPlacementRandom, StringComparison.OrdinalIgnoreCase)
+                || v.Equals("at random", StringComparison.OrdinalIgnoreCase)) return FloorPlacementRandom;
+            if (v.Equals(FloorPlacementPattern, StringComparison.OrdinalIgnoreCase)) return FloorPlacementPattern;
+            if (v.Equals(FloorPlacementPlayers, StringComparison.OrdinalIgnoreCase)
+                || v.Equals("players", StringComparison.OrdinalIgnoreCase)) return FloorPlacementPlayers;
+            return null;
+        }
+
+        /// <summary>Stage 2: the players lay the floor out themselves.</summary>
+        public static bool IsFloorPlacedByPlayers(string value) =>
+            string.Equals(ReadFloorPlacement(value), FloorPlacementPlayers, StringComparison.Ordinal);
+
         /// <summary>True for an on/off value that means on (on, true, yes); false for anything else.</summary>
         public static bool IsToggleOn(string value)
         {
@@ -228,18 +250,17 @@ namespace ConsoleCards.GameTemplates.Definitions
                 }
                 else if (string.Equals(setting.Key, RuleSettingKeys.FloorPlacement, StringComparison.Ordinal))
                 {
-                    string placement = setting.Value.Trim();
-                    if (string.Equals(placement, RuleSettingKeys.FloorPlacementRandom, StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(placement, RuleSettingKeys.FloorPlacementPattern, StringComparison.OrdinalIgnoreCase))
+                    string placement = RuleSettingKeys.ReadFloorPlacement(setting.Value);
+                    if (placement != null)
                     {
                         passedThrough.Add(new RuleSettingValue(
                             setting.Key,
-                            placement.ToLowerInvariant(),
+                            placement,
                             setting.ModeStableIds));
                     }
                     else
                     {
-                        Warn(warnings, setting, "expected random or pattern");
+                        Warn(warnings, setting, "expected at random or by the players");
                     }
                 }
                 else if (string.Equals(setting.Key, RuleSettingKeys.ShopEnabled, StringComparison.Ordinal))

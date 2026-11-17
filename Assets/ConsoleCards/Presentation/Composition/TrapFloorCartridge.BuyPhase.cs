@@ -86,6 +86,7 @@ namespace ConsoleCards.Presentation.Composition
         // The status card's step line (its first word names the HUD's step: "Buy" → SHOP PHASE).
         private string BuyPhaseGuidanceText()
         {
+            if (IsFloorSetupOpen) return FloorSetupStatusText(); // stage 2
             PlayerId buyer = BuyerId;
             if (buyer.IsEmpty)
                 return $"Buy Phase: you are done. Waiting for the others to finish buying; then {FormatPlayerName(host.trapFloorTurnState.NextPlayerId)} plays.";
@@ -106,6 +107,7 @@ namespace ConsoleCards.Presentation.Composition
         // The turn menu in the Buy Phase.
         private void AddBuyPhaseActions(List<PopupActionOption> actions)
         {
+            AddFloorSetupActions(actions); // stage 2: the players lay the floor out first
             PlayerId buyer = BuyerId;
             PendingControllerPurchaseState payment = host.pendingControllerPurchaseState;
             bool purchasePending = !buyer.IsEmpty && payment != null && payment.IsActive && payment.PlayerId == buyer;
@@ -174,6 +176,13 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             ForgetAbilityOffer();
+            if (!result.Succeeded && result.Error == TrapFloorTurnAdvanceError.FloorSetupPending)
+            {
+                host.ShowMessage("Done Buying cannot end the Buy Phase yet: set up the floor first (lay every tile, then Floor set up — Done).");
+                RefreshTrapFloorStatusUi();
+                return;
+            }
+
             if (!result.Succeeded && result.Error != TrapFloorTurnAdvanceError.None)
             {
                 host.ShowMessage($"Done Buying was refused: {result.Error}.");
@@ -221,6 +230,9 @@ namespace ConsoleCards.Presentation.Composition
             {
                 case TrapFloorFinishBuyingCommand finish: requester = finish.Context.RequestedByPlayerId; break;
                 case TrapFloorBuyFromShopCommand buy: requester = buy.Context.RequestedByPlayerId; break;
+                case TrapFloorArrangeFloorCommand _:
+                    hostRefusal = "The host refused that: only the host sets up the floor."; // stage 2
+                    return false;
                 default: return true;
             }
 
@@ -339,6 +351,8 @@ namespace ConsoleCards.Presentation.Composition
                     if (consoleDeck.Count > 1) host.ShuffleDeck(consoleDeckId);
                     dealtPlayers = DealConsoleHands(turn, consoleDeckId);
                 }
+
+                BeginFloorSetupIfChosen(turn); // stage 2: the players lay the floor out themselves (FloorSetup.cs)
             }
             finally
             {

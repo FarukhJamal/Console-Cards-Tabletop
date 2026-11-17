@@ -165,6 +165,8 @@ namespace ConsoleCards.Presentation.Composition
                     new TrapFloorAbilityResolutionState(matchState.Id);
             }
             TrapFloorGame.ConfigureKeyRules(trapFloorObjectiveState); // who may hold which Key, by mode
+            // Stage 2: the floor as the players laid it out in this step (none: the dealt floor), on every rebuild.
+            trapFloorTemplate.TryArrangeFloor(trapFloorTurnState.FloorArrangement);
             trapFloorCollapseUseCase = new TrapFloorCollapseUseCase(
                 trapFloorTemplate,
                 trapFloorCollapseState,

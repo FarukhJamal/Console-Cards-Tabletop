@@ -29,6 +29,7 @@ namespace ConsoleCards.Presentation.Composition
         // The floor tile's menu in Free.
         internal void AddFreeFloorActions(List<PopupActionOption> actions, TabletopObjectId cardId)
         {
+            if (IsFloorSetupOpen && IsBoardTile(cardId)) AddFloorSetupActions(actions); // stage 2 (FloorSetup.cs)
             if (!FreeFloor || host.trapFloorTemplate == null || !IsBoardTile(cardId)) return;
             int locked = CountLockedFloorTiles();
             actions.Add(new PopupActionOption(

@@ -164,6 +164,22 @@ namespace ConsoleCards.Games.TrapFloor
         public CommandContext Context { get; }
     }
 
+    /// <summary>
+    /// Stage 2 (owner, 2026-11-17): the players have laid the floor out themselves; each cell is now the tile they put
+    /// there (the floor tiles in the order of the cells, row 1 from column 1). Sent by the host, or offline by anyone.
+    /// </summary>
+    public sealed class TrapFloorArrangeFloorCommand : ITabletopCommand
+    {
+        public TrapFloorArrangeFloorCommand(CommandContext context, TabletopObjectId[] cardIdsByCell)
+        {
+            Context = context;
+            CardIdsByCell = cardIdsByCell ?? Array.Empty<TabletopObjectId>();
+        }
+
+        public CommandContext Context { get; }
+        public TabletopObjectId[] CardIdsByCell { get; }
+    }
+
     /// <summary>Why a player is out for the floor. There is no concession: the rules have none.</summary>
     public enum TrapFloorEliminationReason
     {

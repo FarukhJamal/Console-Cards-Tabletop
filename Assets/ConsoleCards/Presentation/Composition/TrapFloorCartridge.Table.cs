@@ -246,6 +246,10 @@ namespace ConsoleCards.Presentation.Composition
             authority.Register<TrapFloorFinishBuyingCommand, TrapFloorTurnAdvanceResult>(
                 command => host.trapFloorTurnService.FinishBuying(host.matchState, command.Context), result => result.Succeeded);
             authority.Observe<TrapFloorFinishBuyingCommand, TrapFloorTurnAdvanceResult>(OnBuyingFinished);
+            // Stage 2: the floor as the players laid it out, on every table (only the host, or one computer offline, sends it).
+            authority.Register<TrapFloorArrangeFloorCommand, TrapFloorTurnAdvanceResult>(
+                command => host.trapFloorTurnService.ArrangeFloor(host.matchState, command), result => result.Succeeded);
+            authority.Observe<TrapFloorArrangeFloorCommand, TrapFloorTurnAdvanceResult>(OnFloorArranged);
             authority.Observe<TrapFloorApplyTrapCommand, TrapFloorTurnAdvanceResult>((c, r) => OnEffectAccepted());
             authority.Observe<TrapFloorLaunchTrapCommand, TrapFloorLaunchResult>((c, r) => OnEffectAccepted(true));
             authority.Observe<TrapFloorRollBlindDirectionCommand, TrapFloorBlindDirectionRollResult>((c, r) => OnEffectAccepted(false, c.DieId));
@@ -445,7 +449,7 @@ namespace ConsoleCards.Presentation.Composition
         // with removal from floor"): a taken prize's tile leaves the floor for the taker the same way, so no tile is a
         // hole marker any more; an empty cell is the gap.
         public bool IsFixedBoardPiece(TabletopObjectId objectId) =>
-            !FreeFloor && IsBoardTile(objectId) && !IsLiftedCollapsedTile(objectId); // P-2b: Free leaves the floor to the players
+            !FreeFloor && !IsFloorSetupOpen && IsBoardTile(objectId) && !IsLiftedCollapsedTile(objectId); // P-2b: Free leaves the floor to the players; stage 2: so does the floor setup
 
         public bool IsBoardTile(TabletopObjectId objectId) =>
             host.trapFloorTemplate != null && host.trapFloorTemplate.IsFloorCard(objectId);

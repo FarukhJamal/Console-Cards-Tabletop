@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using ConsoleCards.Application.Commands;
+using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.GameTemplates.ControllerInputs;
@@ -33,6 +34,9 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly HashSet<PlayerId> eliminatedPlayerIds;
         // Buy Phase: the players who have finished buying (empty outside it).
         private readonly HashSet<PlayerId> doneBuyingPlayerIds = new HashSet<PlayerId>();
+        // Stage 2 (owner, 2026-11-17): the players lay the floor out themselves; the floor tiles in the order of the cells
+        // once they have (empty: the dealt floor).
+        private TabletopObjectId[] floorArrangement = Array.Empty<TabletopObjectId>();
         private int activePlayerIndex;
         private int floorOperatorIndex;
         // IMP-1: in a floor turn between two player turns, the index of the player who plays next (-1: the floor turn
@@ -230,6 +234,59 @@ namespace ConsoleCards.Games.TrapFloor
         public void MarkBuyPhaseDealt()
         {
             if (IsBuyPhase) IsBuyPhaseDealt = true;
+        }
+
+        /// <summary>
+        /// Stage 2: the players are laying the floor out themselves. The Buy Phase cannot end (the last Done Buying is
+        /// refused) until they have (<see cref="CompleteFloorSetup"/>).
+        /// </summary>
+        public bool IsFloorSetupPending { get; private set; }
+
+        /// <summary>Stage 2: the floor tiles in cell order as the players laid them out (empty: the dealt floor).</summary>
+        public IReadOnlyList<TabletopObjectId> FloorArrangement => floorArrangement;
+
+        /// <summary>Stage 2: the dealing computer hands the floor to the players (in the Buy Phase before round 1).</summary>
+        public void BeginFloorSetup()
+        {
+            if (!IsBuyPhase || floorArrangement.Length > 0) return;
+            IsFloorSetupPending = true;
+        }
+
+        internal void CompleteFloorSetup(IReadOnlyList<TabletopObjectId> cardIdsByCell)
+        {
+            TabletopObjectId[] copy = new TabletopObjectId[cardIdsByCell.Count];
+            for (int i = 0; i < copy.Length; i++) copy[i] = cardIdsByCell[i];
+            floorArrangement = copy;
+            IsFloorSetupPending = false;
+        }
+
+        internal TabletopObjectId[] CopyFloorArrangement()
+        {
+            TabletopObjectId[] copy = new TabletopObjectId[floorArrangement.Length];
+            Array.Copy(floorArrangement, copy, copy.Length);
+            return copy;
+        }
+
+        // Undo, Redo, a table received: the floor setup as it was kept.
+        internal void RestoreFloorSetup(bool pending, IReadOnlyList<TabletopObjectId> cardIdsByCell)
+        {
+            TabletopObjectId[] copy = new TabletopObjectId[cardIdsByCell != null ? cardIdsByCell.Count : 0];
+            for (int i = 0; i < copy.Length; i++) copy[i] = cardIdsByCell[i];
+            floorArrangement = copy;
+            IsFloorSetupPending = pending && copy.Length == 0;
+        }
+
+        /// <summary>Stage 2: whether this player's Done Buying would end the Buy Phase.</summary>
+        public bool WouldEndBuyPhase(PlayerId playerId)
+        {
+            if (!IsBuyingPlayer(playerId)) return false;
+            for (int i = 0; i < playerOrder.Count; i++)
+            {
+                PlayerId other = playerOrder[i];
+                if (other != playerId && !eliminatedPlayerIds.Contains(other) && !doneBuyingPlayerIds.Contains(other)) return false;
+            }
+
+            return true;
         }
 
         // Undo, Redo, a table received: the Buy Phase as it was kept.
@@ -496,6 +553,12 @@ namespace ConsoleCards.Games.TrapFloor
         CurrentFloorFailed = 8,
         PlayerIsNotParticipant = 9,
         PlayerAlreadyEliminatedForCurrentRound = 10,
+        /// <summary>Stage 2: the players are still laying the floor out; the Buy Phase cannot end yet.</summary>
+        FloorSetupPending = 11,
+        /// <summary>Stage 2: no floor setup is waiting.</summary>
+        FloorSetupNotPending = 12,
+        /// <summary>Stage 2: the layout does not use every floor tile once, or a tile is face up.</summary>
+        FloorArrangementInvalid = 13,
     }
 
     public readonly struct TrapFloorTurnAdvanceResult
@@ -669,10 +732,43 @@ namespace ConsoleCards.Games.TrapFloor
                 return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.PlayerIsNotParticipant);
             if (!state.IsBuyingPlayer(buyer))
                 return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.ActorIsNotActivePlayer);
+            if (state.IsFloorSetupPending && state.WouldEndBuyPhase(buyer))
+                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.FloorSetupPending);
             state.MarkFinishedBuying(buyer);
             long revision = matchState.AdvanceRevision(
                 context.Id,
                 buyer,
+                AuthoritativeActionKind.Unspecified);
+            return TrapFloorTurnAdvanceResult.Accepted(revision, 0);
+        }
+
+        /// <summary>
+        /// Stage 2: the players have laid the floor out; from now on each cell is the tile they put there. Every computer
+        /// runs it the same way (only the host, or one computer offline, sends it). Every floor tile must still be face
+        /// down and lie loose on the table.
+        /// </summary>
+        public TrapFloorTurnAdvanceResult ArrangeFloor(MatchState matchState, TrapFloorArrangeFloorCommand command)
+        {
+            if (command == null) return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.FloorArrangementInvalid);
+            TrapFloorTurnAdvanceResult validation = ValidateSessionOperation(matchState, command.Context);
+            if (!validation.Succeeded) return validation;
+            if (!state.IsFloorSetupPending)
+                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.FloorSetupNotPending);
+            if (!template.IsFloorArrangement(command.CardIdsByCell))
+                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.FloorArrangementInvalid);
+            for (int i = 0; i < command.CardIdsByCell.Length; i++)
+            {
+                if (!matchState.Cards.TryGetValue(command.CardIdsByCell[i], out CardInstanceState tile)
+                    || tile.Face != CardFace.FaceDown
+                    || !tile.BaseState.ContainerId.IsEmpty)
+                    return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.FloorArrangementInvalid);
+            }
+
+            template.TryArrangeFloor(command.CardIdsByCell);
+            state.CompleteFloorSetup(command.CardIdsByCell);
+            long revision = matchState.AdvanceRevision(
+                command.Context.Id,
+                command.Context.RequestedByPlayerId,
                 AuthoritativeActionKind.Unspecified);
             return TrapFloorTurnAdvanceResult.Accepted(revision, 0);
         }

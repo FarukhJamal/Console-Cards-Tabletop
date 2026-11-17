@@ -120,9 +120,12 @@ MonoBehaviour:
       text: 'Tiles are placed {value}.'
       settingKind: 3
       settingKey: floor.placement
-      value: 'random'
-      displayValue: 'at random'
+      value: 'at random'
+      displayValue: ''
       modeStableIds: []
+      choices:
+      - at random
+      - by the players
     - stableId: tf-setup-avatar
       text: 'On Easy, each player starts with their Avatar''s Ability (Athlete: Jump, Engineer: Arm and Disarm, Strategist: Shield, Clairvoyant: Safe Search); on Medium, Hard and Impossible nobody starts with one. Pawns start beside the board, next to their starting corner, and are safe there; stepping onto that corner tile is the first step of a move.'
       settingKind: 0

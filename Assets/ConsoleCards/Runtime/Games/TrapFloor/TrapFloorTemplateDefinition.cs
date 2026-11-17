@@ -17,8 +17,11 @@ namespace ConsoleCards.Games.TrapFloor
     /// </summary>
     public sealed class TrapFloorTemplateDefinition
     {
-        private readonly ReadOnlyDictionary<TrapFloorCoordinate, TabletopObjectId> floorCardIds;
-        private readonly ReadOnlyDictionary<TabletopObjectId, TrapFloorCoordinate> floorCoordinates;
+        // Stage 2 (owner, 2026-11-17): the players may lay the floor out themselves; the floor then follows where each tile
+        // was put (TryArrangeFloor). The dealt mapping is kept to go back to (Undo) and for the cells' home places.
+        private readonly ReadOnlyDictionary<TrapFloorCoordinate, TabletopObjectId> dealtFloorCardIds;
+        private ReadOnlyDictionary<TrapFloorCoordinate, TabletopObjectId> floorCardIds;
+        private ReadOnlyDictionary<TabletopObjectId, TrapFloorCoordinate> floorCoordinates;
         private readonly ReadOnlyDictionary<TabletopObjectId, string> cardLabels;
         private readonly ReadOnlyDictionary<ObjectDefinitionId, TrapFloorFloorContentDefinition> floorContentDefinitions;
         private readonly int floorContentInstanceCount;
@@ -72,6 +75,7 @@ namespace ConsoleCards.Games.TrapFloor
                     floorCardIds ?? throw new ArgumentNullException(nameof(floorCardIds))));
             this.floorCoordinates = new ReadOnlyDictionary<TabletopObjectId, TrapFloorCoordinate>(
                 ReverseFloorCoordinates(this.floorCardIds));
+            dealtFloorCardIds = this.floorCardIds;
             this.cardLabels = new ReadOnlyDictionary<TabletopObjectId, string>(
                 new Dictionary<TabletopObjectId, string>(
                     cardLabels ?? throw new ArgumentNullException(nameof(cardLabels))));
@@ -183,6 +187,75 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             return floorCardIds.TryGetValue(coordinate, out objectId);
+        }
+
+        /// <summary>Stage 2: true while the floor follows the players' own layout (not the dealt one).</summary>
+        public bool IsFloorArranged => !ReferenceEquals(floorCardIds, dealtFloorCardIds);
+
+        /// <summary>The grid's cells in a fixed order: row 1 from column 1, then row 2, and so on.</summary>
+        public int CellCount => GridRows * GridColumns;
+
+        public TrapFloorCoordinate CellAt(int index) =>
+            new TrapFloorCoordinate(
+                (index % GridColumns) + TrapFloorCoordinate.MinimumAxisValue,
+                (index / GridColumns) + TrapFloorCoordinate.MinimumAxisValue);
+
+        /// <summary>
+        /// Stage 2: the floor as the players laid it out, one tile per cell in <see cref="CellAt"/> order. Null or empty
+        /// goes back to the dealt floor. False (nothing changes) unless it uses every floor tile of this floor once.
+        /// </summary>
+        public bool TryArrangeFloor(IReadOnlyList<TabletopObjectId> cardIdsByCell)
+        {
+            if (cardIdsByCell == null || cardIdsByCell.Count == 0)
+            {
+                SetFloorCardIds(dealtFloorCardIds);
+                return true;
+            }
+
+            if (!IsFloorArrangement(cardIdsByCell)) return false;
+            Dictionary<TrapFloorCoordinate, TabletopObjectId> arranged = new Dictionary<TrapFloorCoordinate, TabletopObjectId>();
+            for (int i = 0; i < cardIdsByCell.Count; i++) arranged.Add(CellAt(i), cardIdsByCell[i]);
+            SetFloorCardIds(new ReadOnlyDictionary<TrapFloorCoordinate, TabletopObjectId>(arranged));
+            return true;
+        }
+
+        /// <summary>Stage 2: every floor tile of this floor once, one per cell.</summary>
+        public bool IsFloorArrangement(IReadOnlyList<TabletopObjectId> cardIdsByCell)
+        {
+            if (cardIdsByCell == null || cardIdsByCell.Count != CellCount || CellCount != dealtFloorCardIds.Count) return false;
+            HashSet<TabletopObjectId> seen = new HashSet<TabletopObjectId>();
+            HashSet<TabletopObjectId> tiles = new HashSet<TabletopObjectId>(dealtFloorCardIds.Values);
+            for (int i = 0; i < cardIdsByCell.Count; i++)
+            {
+                if (!tiles.Contains(cardIdsByCell[i]) || !seen.Add(cardIdsByCell[i])) return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Stage 2: where a cell's tile lies when the floor is dealt (its home place, from the template), whichever tile
+        /// the players put there.
+        /// </summary>
+        public bool TryGetHomeCellPose(TrapFloorCoordinate cell, out TabletopPose pose)
+        {
+            pose = TabletopPose.Default;
+            if (!dealtFloorCardIds.TryGetValue(cell, out TabletopObjectId dealtId)) return false;
+            for (int i = 0; i < Template.Objects.Count; i++)
+            {
+                if (Template.Objects[i].Id != dealtId) continue;
+                pose = Template.Objects[i].Pose;
+                return true;
+            }
+
+            return false;
+        }
+
+        private void SetFloorCardIds(ReadOnlyDictionary<TrapFloorCoordinate, TabletopObjectId> cardIds)
+        {
+            if (ReferenceEquals(floorCardIds, cardIds)) return;
+            floorCardIds = cardIds;
+            floorCoordinates = new ReadOnlyDictionary<TabletopObjectId, TrapFloorCoordinate>(ReverseFloorCoordinates(cardIds));
         }
 
         public bool IsCoordinateInGrid(TrapFloorCoordinate coordinate)

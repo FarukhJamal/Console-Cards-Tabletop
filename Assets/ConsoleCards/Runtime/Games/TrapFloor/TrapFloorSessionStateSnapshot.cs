@@ -34,6 +34,8 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly bool isCurrentFloorFailed;
         private readonly PlayerId[] doneBuyingPlayerIds; // Buy Phase (rules v1.151126)
         private readonly bool buyPhaseDealt;
+        private readonly bool floorSetupPending; // stage 2: the players lay the floor out
+        private readonly TabletopObjectId[] floorArrangement;
         private readonly TrapFloorTrapResolutionRecord[] trapResolutionRecords;
         private readonly TrapFloorAbilityActivationRecord[] abilityActivations;
         private readonly TrapFloorDodgeAssistanceState dodgeAssistance;
@@ -79,6 +81,8 @@ namespace ConsoleCards.Games.TrapFloor
             isCurrentFloorFailed = turn.IsCurrentFloorFailed;
             doneBuyingPlayerIds = turn.CopyDoneBuyingPlayerIds();
             buyPhaseDealt = turn.IsBuyPhaseDealt;
+            floorSetupPending = turn.IsFloorSetupPending;
+            floorArrangement = turn.CopyFloorArrangement();
             trapResolutionRecords = abilityResolution.CopyTrapRecords();
             abilityActivations = abilityResolution.CopyAbilityActivations();
             dodgeAssistance = abilityResolution.CopyDodgeAssistance();
@@ -151,6 +155,7 @@ namespace ConsoleCards.Games.TrapFloor
                 isCurrentFloorFailed,
                 floorResumeIndex);
             turn.RestoreBuyPhase(doneBuyingPlayerIds, buyPhaseDealt);
+            turn.RestoreFloorSetup(floorSetupPending, floorArrangement);
             TrapFloorAbilityResolutionState abilityResolution =
                 new TrapFloorAbilityResolutionState(MatchId);
             abilityResolution.Restore(

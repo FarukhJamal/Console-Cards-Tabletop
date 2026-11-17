@@ -79,6 +79,9 @@ namespace ConsoleCards.Editor.Board
         [MenuItem(Stage + "Put seat 3 pawn on the collapse tile")] private static void Put3() => Debug.Log(TrapFloorDevFixtures.PutSeatPawnOnCollapseTile(Object.FindFirstObjectByType<TabletopComposition>(), 2));
         [MenuItem(Stage + "Put seat 4 pawn on the collapse tile")] private static void Put4() => Debug.Log(TrapFloorDevFixtures.PutSeatPawnOnCollapseTile(Object.FindFirstObjectByType<TabletopComposition>(), 3));
 
+        // 2026-11-17 (stage 2 checks): the players' floor deck laid on the empty spaces.
+        [MenuItem(Stage + "Lay the floor deck on the empty spaces")] private static void LayFloor() => Debug.Log(TrapFloorDevFixtures.LayFloorDeckOnEmptySpaces(Object.FindFirstObjectByType<TabletopComposition>()));
+
         [MenuItem(Stage + "Report state")]
         private static void Report() => Debug.Log(TrapFloorDevFixtures.Report(Object.FindFirstObjectByType<TabletopComposition>()));
 

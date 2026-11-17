@@ -354,6 +354,63 @@ namespace ConsoleCards.Presentation.Composition
             return $"[Scenario] FAIL setup: no '{cardName}' left in the Ability deck.";
         }
 
+        /// <summary>
+        /// Setup only (2026-11-17, stage 2 checks): the floor deck's tiles (top first) laid face down on the board's empty
+        /// spaces in cell order, as a player would put them, through the normal transfer command. Then Floor set up —
+        /// Done is pressed by hand.
+        /// </summary>
+        public static string LayFloorDeckOnEmptySpaces(TabletopComposition host)
+        {
+            if (host == null || (host.HasOnline && host.Online.InRoom && !host.Online.IsPrivateHost)) return "[Scenario] FAIL setup: host only.";
+            TrapFloorTemplateDefinition template = host.trapFloorTemplate;
+            if (template == null || host.matchState == null) return "[Scenario] FAIL setup: no Trap Floor table.";
+            int cells = template.CellCount;
+            TabletopPose[] homes = new TabletopPose[cells];
+            for (int i = 0; i < cells; i++)
+                if (!template.TryGetHomeCellPose(template.CellAt(i), out homes[i])) return "[Scenario] FAIL setup: a board space was not found.";
+            bool[] taken = new bool[cells];
+            ConsoleCards.Core.Identifiers.ContainerId deckId = ConsoleCards.Core.Identifiers.ContainerId.Empty;
+            foreach (TabletopObjectId tileId in template.FloorCardIds.Values)
+            {
+                if (!host.matchState.Cards.TryGetValue(tileId, out CardInstanceState tile)) continue;
+                if (!tile.BaseState.ContainerId.IsEmpty)
+                {
+                    deckId = tile.BaseState.ContainerId;
+                    continue;
+                }
+
+                for (int i = 0; i < cells; i++)
+                {
+                    if (Math.Abs(tile.BaseState.Pose.Position.X - homes[i].Position.X) <= template.Grid.CellWidth * 0.5d
+                        && Math.Abs(tile.BaseState.Pose.Position.Y - homes[i].Position.Y) <= template.Grid.CellHeight * 0.5d)
+                        taken[i] = true;
+                }
+            }
+
+            if (deckId.IsEmpty || !host.matchState.Containers.TryGetValue(deckId, out ConsoleCards.Core.Domain.Containers.ContainerState deck))
+                return "[Scenario] FAIL setup: no floor deck on the table.";
+            List<TabletopObjectId> cards = new List<TabletopObjectId>();
+            for (int c = deck.Count - 1; c >= 0; c--) cards.Add(deck.GetObjectAt(c));
+            int laid = 0;
+            int next = 0;
+            for (int k = 0; k < cards.Count; k++)
+            {
+                while (next < cells && taken[next]) next++;
+                if (next >= cells) break;
+                ConsoleCards.Application.Results.TransferCardResult moved =
+                    host.TableAuthority.Submit<ConsoleCards.Application.Commands.TransferCardCommand, ConsoleCards.Application.Results.TransferCardResult>(
+                        new ConsoleCards.Application.Commands.TransferCardCommand(host.CreateCommandContext(), cards[k], deckId, ConsoleCards.Core.Identifiers.ContainerId.Empty, homes[next]));
+                if (!moved.Succeeded) return $"[Scenario] FAIL setup: tile {k + 1} was refused ({moved.Error}); {laid} laid.";
+                taken[next] = true;
+                host.PresentAcceptedObject(cards[k]);
+                laid++;
+            }
+
+            host.ViewSync.SyncContainer(deckId);
+            host.RefreshAcceptedCardFaces();
+            return $"[Scenario] SETUP (host-only): {laid} floor tiles laid face down on the empty spaces; now press Floor set up — Done.";
+        }
+
         private static void Enqueue(TabletopObjectId dieId, int face)
         {
             if (!queuedFaces.TryGetValue(dieId, out Queue<int> q)) queuedFaces[dieId] = q = new Queue<int>();
