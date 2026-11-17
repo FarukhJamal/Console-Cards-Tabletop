@@ -231,6 +231,8 @@ namespace ConsoleCards.Presentation.Composition
                 case TrapFloorFinishBuyingCommand finish: requester = finish.Context.RequestedByPlayerId; break;
                 case TrapFloorBuyFromShopCommand buy: requester = buy.Context.RequestedByPlayerId; break;
                 case TrapFloorArrangeFloorCommand _:
+                    // Stage 2: the host's own player passes (the host's commands meet this same check, audit A2).
+                    if (host.IsPlayerOnThisComputer(sender)) return true;
                     hostRefusal = "The host refused that: only the host sets up the floor."; // stage 2
                     return false;
                 default: return true;

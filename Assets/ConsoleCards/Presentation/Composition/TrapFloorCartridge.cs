@@ -1005,6 +1005,13 @@ namespace ConsoleCards.Presentation.Composition
                     }
 
                     hash = Mix(hash, players);
+                    // Stage 2: the floor setup (open or not, and the layout the players laid), so a table that missed it
+                    // is noticed and sent again.
+                    hash = Mix(hash, turn.IsFloorSetupPending ? 1UL : 0UL);
+                    ulong laid = 0UL;
+                    for (int i = 0; i < turn.FloorArrangement.Count; i++)
+                        laid += Mix(IdHash(turn.FloorArrangement[i].Value), (ulong)(i + 1));
+                    hash = Mix(hash, laid);
                 }
 
                 TrapFloorCollapseState collapse = host.trapFloorCollapseState;

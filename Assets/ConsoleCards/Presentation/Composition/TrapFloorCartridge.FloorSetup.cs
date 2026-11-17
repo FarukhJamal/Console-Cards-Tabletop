@@ -94,6 +94,8 @@ namespace ConsoleCards.Presentation.Composition
             host.GroupCardsIntoDeck(tiles);
             MoveFloorDeckBesideBoard();
             Debug.Log($"[Floor] Setup by the players: {tiles.Count} floor tiles gathered into one deck.");
+            // The setup flag is game state outside the command door: the joined computers get it with the whole table.
+            if (host.HasOnline) host.Online.MarkDirty();
             host.FeedbackLine(
                 $"SET UP THE FLOOR — shuffle the floor deck beside the board and lay all {tiles.Count} tiles face down on the "
                     + "board, one on each space. Then turn menu › Floor set up — Done.",

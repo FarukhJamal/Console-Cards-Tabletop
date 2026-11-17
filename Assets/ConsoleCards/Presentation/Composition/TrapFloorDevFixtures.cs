@@ -361,7 +361,10 @@ namespace ConsoleCards.Presentation.Composition
         /// </summary>
         public static string LayFloorDeckOnEmptySpaces(TabletopComposition host)
         {
-            if (host == null || (host.HasOnline && host.Online.InRoom && !host.Online.IsPrivateHost)) return "[Scenario] FAIL setup: host only.";
+            // Online the host may run it too (2026-11-18 online checks): it only submits ordinary transfers, which every
+            // computer gets as commands. A joined computer is refused.
+            if (host == null || (host.HasOnline && host.Online.InRoom && !host.Online.IsHosting && !host.Online.IsPrivateHost))
+                return "[Scenario] FAIL setup: host only.";
             TrapFloorTemplateDefinition template = host.trapFloorTemplate;
             if (template == null || host.matchState == null) return "[Scenario] FAIL setup: no Trap Floor table.";
             int cells = template.CellCount;
