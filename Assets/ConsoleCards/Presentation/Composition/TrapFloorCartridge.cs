@@ -7278,7 +7278,7 @@ namespace ConsoleCards.Presentation.Composition
             // Rules drive play (doc 23, R2a): the rule set in play (the default or agreed house rules, R3) feeds the
             // game data the template uses.
             host.RulesCardPanel.EnsureHouseRulesLoaded();
-            RuleSetDefinition rules = host.RulesCardPanel.ActiveRuleSet;
+            RuleSetDefinition rules = host.RulesCardPanel.PlayRuleSet; // STAGE-3: with the game's own default counts
             // Your cards (doc 27 L2-1) come first: changed default cards and new cards; house-rule costs win on top.
             GameContent content = BuildTrapFloorContent(useChosenDeck);
             GameDefinitionData gameDefinition;

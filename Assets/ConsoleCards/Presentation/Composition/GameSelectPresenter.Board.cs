@@ -151,7 +151,8 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             RulesCardModel rules = entry.Game != null ? RulesCardModel.FromRuleSet(entry.Game.DefaultRuleSet, null,
-                tilesValue != null ? RuleSettingKeys.FloorPlacement : null, tilesValue) : null;
+                rule => tilesValue != null && string.Equals(rule.SettingKey, RuleSettingKeys.FloorPlacement, StringComparison.Ordinal)
+                    ? tilesValue : null) : null;
             if (rules == null) return lines;
             for (int i = 0; i < rules.Lines.Count && lines.Count < 4; i++)
             {

@@ -172,7 +172,8 @@ namespace ConsoleCards.Presentation.Composition
             string deckName = isGameDeck ? $"{gameName} deck" : isStage ? StageTitle(deck) : DeckName(deck);
 
             List<DeckEditorCard> cards = DeckEditorCards();
-            List<DeckEditorCardRowModel> rows = new List<DeckEditorCardRowModel>(cards.Count);
+            List<DeckEditorCardRowModel> rows = new List<DeckEditorCardRowModel>(cards.Count + 12);
+            if (isStage) AddFloorCountRows(deck.stage, rows); // STAGE-3: the game's default floor deck counts first
             int total = 0;
             int different = 0;
             for (int i = 0; i < cards.Count; i++)
@@ -375,6 +376,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void ChangeDeckEditorCopies(string cardId, int step)
         {
+            if (TryChangeFloorCount(cardId, step)) return; // STAGE-3
             List<DeckEditorCard> cards = DeckEditorCards();
             for (int i = 0; i < cards.Count; i++)
             {

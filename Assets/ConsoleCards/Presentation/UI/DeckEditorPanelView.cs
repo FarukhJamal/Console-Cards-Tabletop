@@ -8,14 +8,18 @@ namespace ConsoleCards.Presentation.UI
     /// <summary>One card in the deck editor: its picture, name and kind, and its copies in the selected deck.</summary>
     public readonly struct DeckEditorCardRowModel
     {
-        public DeckEditorCardRowModel(string cardId, string name, string detail, Texture thumbnail, int copies)
+        public DeckEditorCardRowModel(string cardId, string name, string detail, Texture thumbnail, int copies, bool isSetting = false)
         {
             CardId = cardId ?? string.Empty;
             Name = name ?? string.Empty;
             Detail = detail ?? string.Empty;
             Thumbnail = thumbnail;
             Copies = copies;
+            IsSetting = isSetting;
         }
+
+        /// <summary>STAGE-3: a number of the game's setup (a floor deck count), not a card: always shown, never counted.</summary>
+        public bool IsSetting { get; }
 
         public string CardId { get; }
         public string Name { get; }
@@ -218,7 +222,7 @@ namespace ConsoleCards.Presentation.UI
 
             for (int i = 0; i < model.Cards.Count; i++)
             {
-                if (IsBoard && model.Cards[i].Copies <= 0) continue; // board 11: the deck shows the cards in it
+                if (IsBoard && model.Cards[i].Copies <= 0 && !model.Cards[i].IsSetting) continue; // board 11: the deck shows the cards in it
                 DeckEditorCardRowView row =
                     uiService.AcquirePooled<DeckEditorCardRowView>(UiPrefabIds.DeckEditorCardRow, cardRowsRoot);
                 row.Bind(model.Cards[i], HandleCopies);
@@ -332,6 +336,7 @@ namespace ConsoleCards.Presentation.UI
             int total = 0;
             for (int i = 0; i < model.Cards.Count; i++)
             {
+                if (model.Cards[i].IsSetting) continue; // STAGE-3: not a card to add or count
                 boardCards.Add(model.Cards[i]);
                 total += model.Cards[i].Copies;
             }

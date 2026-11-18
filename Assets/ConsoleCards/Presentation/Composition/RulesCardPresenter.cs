@@ -80,9 +80,12 @@ namespace ConsoleCards.Presentation.Composition
 
             string modeStableId = host.ActiveCartridge.ActiveModeStableId;
             bool? tiles = host.ActiveCartridge is TrapFloorCartridge ? host.TrapFloorGame.FloorByPlayersChoice : null;
-            RulesCardModel model = RulesCardModel.FromRuleSet(ActiveRuleSet, modeStableId,
-                tiles.HasValue ? RuleSettingKeys.FloorPlacement : null, // TILES-1: the game sheet's choice
-                tiles.HasValue ? TrapFloorCartridge.TilesName(tiles.Value) : null);
+            RuleSetDefinition shown = ActiveRuleSet;
+            Dictionary<string, string> defaults = GameDefaultChanges(shown); // STAGE-3: the game's own default counts
+            RulesCardModel model = RulesCardModel.FromRuleSet(shown, modeStableId, entry =>
+                tiles.HasValue && string.Equals(entry.SettingKey, RuleSettingKeys.FloorPlacement, StringComparison.Ordinal)
+                    ? TrapFloorCartridge.TilesName(tiles.Value) // TILES-1: the game sheet's choice
+                    : defaults != null && defaults.TryGetValue(entry.StableId, out string value) ? value : null);
             if (model == null) return null;
             if (rulesCardActions == null)
             {
@@ -94,7 +97,7 @@ namespace ConsoleCards.Presentation.Composition
                 };
             }
 
-            string pending = host.templatesRuleSet != null && SettingsDiffer(host.templatesRuleSet, ActiveRuleSet)
+            string pending = host.templatesRuleSet != null && SettingsDiffer(host.templatesRuleSet, PlayRuleSet) // STAGE-3: as dealt
                 ? "Changed settings start when the game restarts."
                 : string.Empty;
             return model.WithActions(rulesCardActions, 1 + host.houseRuleSets.Count, pending)
@@ -106,6 +109,84 @@ namespace ConsoleCards.Presentation.Composition
         // MP-4: online the host's house rules are shared with the room (its choice comes with the table).
         internal RuleSetDefinition ActiveRuleSet =>
             activeRuleSet != null ? activeRuleSet : host.TableGame != null ? host.TableGame.DefaultRuleSet : null;
+
+        // ---------- STAGE-3: the game's own default values (CREATE › DECKS) ----------
+
+        /// <summary>
+        /// STAGE-3 (owner, 2026-11-18): the rules a table is set up with: the set in play, with the game's own default
+        /// values from CREATE › DECKS (the game's files; a player's own in a build) on every entry no house rule
+        /// changed. Event-time only (a table deal, a trial, the rules card).
+        /// </summary>
+        internal RuleSetDefinition PlayRuleSet => WithGameDefaults(ActiveRuleSet);
+
+        private RuleSetDefinition playRuleSetMade;
+        private RuleSetDefinition playRuleSetBase;
+        private string playRuleSetKey = string.Empty;
+
+        internal RuleSetDefinition WithGameDefaults(RuleSetDefinition set)
+        {
+            Dictionary<string, string> values = GameDefaultChanges(set);
+            if (values == null || values.Count == 0) return set;
+            StringBuilder key = new StringBuilder();
+            Dictionary<string, RuleEntryChange> changes = new Dictionary<string, RuleEntryChange>(StringComparer.Ordinal);
+            foreach (KeyValuePair<string, string> pair in values)
+            {
+                changes[pair.Key] = new RuleEntryChange(null, pair.Value);
+                key.Append(pair.Key).Append('=').Append(pair.Value).Append(';');
+            }
+
+            if (playRuleSetMade != null && ReferenceEquals(playRuleSetBase, set) && playRuleSetKey == key.ToString()) return playRuleSetMade;
+            // The previous one is not destroyed: the table set up with it keeps it (host.templatesRuleSet, the restart check).
+            playRuleSetMade = RuleSetDefinition.CreateHouseRules(set, set.StableId, set.DisplayName, changes);
+            playRuleSetBase = set;
+            playRuleSetKey = key.ToString();
+            return playRuleSetMade;
+        }
+
+        // The game's default values that apply to this set: entry ID → value, for entries no house rule (anywhere
+        // under this set) changed and whose value differs. Null when there are none.
+        internal Dictionary<string, string> GameDefaultChanges(RuleSetDefinition set)
+        {
+            if (set == null || host.TableGame == null) return null;
+            host.EnsureContentArt();
+            if (host.contentArt == null) return null;
+            List<PlayerRuleValue> values = host.contentArt.LoadPlayerDecks().ruleValues;
+            Dictionary<string, string> found = null;
+            for (int i = 0; values != null && i < values.Count; i++)
+            {
+                PlayerRuleValue value = values[i];
+                if (value == null || string.IsNullOrEmpty(value.entryId) || !set.TryGetEntry(value.entryId, out RuleEntry entry)) continue;
+                if (string.Equals(entry.Value, value.value, StringComparison.Ordinal) || ChangedByHouseRules(set, value.entryId)) continue;
+                if (found == null) found = new Dictionary<string, string>(StringComparer.Ordinal);
+                found[value.entryId] = value.value ?? string.Empty;
+            }
+
+            return found;
+        }
+
+        // The entry as played at this table: with the game's own default value when one applies to it.
+        private RuleEntry InPlay(RuleEntry entry)
+        {
+            Dictionary<string, string> defaults = GameDefaultChanges(ActiveRuleSet);
+            return defaults != null && defaults.TryGetValue(entry.StableId, out string value) ? entry.WithChange(null, value) : entry;
+        }
+
+        private static Dictionary<string, RuleEntryChange> ToChanges(Dictionary<string, string> values)
+        {
+            Dictionary<string, RuleEntryChange> changes = new Dictionary<string, RuleEntryChange>(StringComparer.Ordinal);
+            foreach (KeyValuePair<string, string> pair in values) changes[pair.Key] = new RuleEntryChange(null, pair.Value);
+            return changes;
+        }
+
+        private static bool ChangedByHouseRules(RuleSetDefinition set, string entryId)
+        {
+            for (RuleSetDefinition s = set; s != null && s.BasedOn != null; s = s.BasedOn)
+            {
+                if (s.TryGetEntry(entryId, out RuleEntry entry) && RuleSetComparison.IsChanged(s, entry)) return true;
+            }
+
+            return false;
+        }
 
         /// <summary>MP-4: the ID of the house-rule set in play (empty: the game's default rules).</summary>
         internal string ActiveRuleSetId => activeRuleSet != null ? activeRuleSet.StableId : string.Empty;
@@ -204,7 +285,8 @@ namespace ConsoleCards.Presentation.Composition
             if (rules == null || !rules.TryGetEntry(entryStableId, out RuleEntry entry)) return;
             ruleProposalEntryId = entryStableId;
             ruleProposalSetIndex = -1;
-            ruleProposalValue = entry.Value;
+            Dictionary<string, string> defaults = GameDefaultChanges(rules); // STAGE-3: starts from the value in play
+            ruleProposalValue = defaults != null && defaults.TryGetValue(entryStableId, out string inPlay) ? inPlay : entry.Value;
             ruleProposalText = entry.Text;
             BeginRuleProposal();
         }
@@ -295,7 +377,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 if (!ActiveRuleSet.TryGetEntry(ruleProposalEntryId, out RuleEntry entry)) return false;
                 RuleProposalEditKind kind = RuleProposalEditKindFor(entry);
-                model.CurrentText = entry.FormatText();
+                model.CurrentText = InPlay(entry).FormatText(); // STAGE-3: with the game's own default
                 model.EditKind = kind;
                 model.ValueText = ruleProposalValue;
                 model.EditText = EditsRuleText(entry) ? ruleProposalText : ruleProposalValue;
@@ -421,7 +503,7 @@ namespace ConsoleCards.Presentation.Composition
             if (ruleProposalEntryId == null) preview = ruleProposalSetIndex >= 0 ? $"Switch to: {RuleSetAt(ruleProposalSetIndex).DisplayName}" : string.Empty;
             else if (ActiveRuleSet.TryGetEntry(ruleProposalEntryId, out RuleEntry entry))
             {
-                current = entry.FormatText();
+                current = InPlay(entry).FormatText(); // STAGE-3
                 preview = entry.WithChange(ruleProposalText, ruleProposalValue).FormatText();
             }
 
@@ -475,9 +557,12 @@ namespace ConsoleCards.Presentation.Composition
             RuleSetDefinition trial = RuleSetDefinition.CreateHouseRules(ActiveRuleSet, "rules-trial", "Trial", change);
             try
             {
+                Dictionary<string, string> defaults = GameDefaultChanges(trial); // STAGE-3: a trial copy, the table's kept
+                RuleSetDefinition played = defaults == null ? trial : RuleSetDefinition.CreateHouseRules(trial, trial.StableId, trial.DisplayName, ToChanges(defaults));
                 var gameDefinition = host.tableContent != null
-                    ? host.tableContent.ToData(trial)
-                    : host.TableGame.ToData(trial);
+                    ? host.tableContent.ToData(played)
+                    : host.TableGame.ToData(played);
+                if (!ReferenceEquals(played, trial)) UnityEngine.Object.Destroy(played);
                 IGameCartridge cartridge = host.Cartridges.CodeCartridgeFor(host.TableGame); // CART-1b: the game sets itself up
                 for (int i = 0; cartridge != null && i < gameDefinition.Modes.Count; i++)
                 {
@@ -591,7 +676,7 @@ namespace ConsoleCards.Presentation.Composition
             DropTilesChoiceIfRuleChanged();
             RefreshGameHints(); // tips follow the rules in play
             host.ActiveCartridge.RefreshShopEntry(); // the Shop opens or closes at once (owner, 2026-10-15)
-            bool restartNeeded = host.templatesRuleSet != null && SettingsDiffer(host.templatesRuleSet, ActiveRuleSet);
+            bool restartNeeded = host.templatesRuleSet != null && SettingsDiffer(host.templatesRuleSet, PlayRuleSet); // STAGE-3
             string said = restartNeeded ? $"{message} Changed settings start when you restart." : message;
             CloseRuleProposal(said);
             RefreshRulesCard();

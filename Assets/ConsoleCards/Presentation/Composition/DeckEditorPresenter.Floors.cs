@@ -167,8 +167,9 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         internal string StageText(PlayerDeckRecord deck) =>
-            $"{StageTitle(deck)}: the Traps, Friends and Abilities this floor is dealt from (scaled to fit). "
-            + "No cards: the game makes the floor by the difficulty. Keys and Exits come from the game mode.";
+            $"{StageTitle(deck)}: the first rows are the game's default floor deck for each difficulty (Friends, Abilities, Fall "
+            + "Traps; Traps fill the rest after the Keys and Exits). Below: the Traps, Friends and Abilities this floor is dealt "
+            + "from (scaled to fit); no cards: the game makes the floor by the difficulty.";
 
         // A floor deck lists the floor's Traps, Friends and Abilities (Keys and Exits are set by the mode).
         internal static bool IsKeyOrExit(DeckEditorCard card)

@@ -83,11 +83,11 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>
         /// Builds the card for one mode of a rule set: sections in order, rules filtered by mode, setting values in
         /// bold, and a mark on every line that differs from the set it is based on. Null when nothing applies.
-        /// TILES-1: <paramref name="settingKey"/> / <paramref name="settingValue"/> show one setting's value as chosen
-        /// for this game (the game sheet's Tiles are placed) in place of the rule set's.
+        /// TILES-1 / STAGE-3: <paramref name="valueFor"/> gives a value chosen for this game (the game sheet's Tiles are
+        /// placed, the game's own default floor deck counts) in place of the rule set's; null keeps the set's.
         /// </summary>
         public static RulesCardModel FromRuleSet(RuleSetDefinition set, string modeStableId,
-            string settingKey = null, string settingValue = null)
+            Func<RuleEntry, string> valueFor = null)
         {
             if (set == null)
             {
@@ -122,10 +122,9 @@ namespace ConsoleCards.Presentation.UI
                     lines.Add(new RulesCardLine(
                         RulesCardLineKind.Rule,
                         section.Numbered ? number.ToString() : "•",
-                        (settingKey != null && settingValue != null
-                            && string.Equals(entry.SettingKey, settingKey, StringComparison.Ordinal)
-                                ? entry.WithChange(null, settingValue)
-                                : entry).FormatText("<b>{0}</b>"),
+                        (valueFor != null && valueFor(entry) is string chosen
+                            ? entry.WithChange(null, chosen)
+                            : entry).FormatText("<b>{0}</b>"),
                         RuleSetComparison.IsChanged(set, entry),
                         entry.StableId));
                 }

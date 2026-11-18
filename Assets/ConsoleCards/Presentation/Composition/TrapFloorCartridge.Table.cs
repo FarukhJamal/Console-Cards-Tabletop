@@ -143,7 +143,7 @@ namespace ConsoleCards.Presentation.Composition
             GameContent content = BuildTrapFloorContent(true);
             try
             {
-                GameDefinitionData data = content.ToData(host.RulesCardPanel.ActiveRuleSet);
+                GameDefinitionData data = content.ToData(host.RulesCardPanel.PlayRuleSet); // STAGE-3
                 TrapFloorTemplateFactory.CreateStandardFourPlayer(
                     new SystemRandomValueSource(), data, template.ActiveMode.StableId, host.GetConsoleLayout(), 0, null, DealPlayerCount,
                     recipe: DealRecipe(0));

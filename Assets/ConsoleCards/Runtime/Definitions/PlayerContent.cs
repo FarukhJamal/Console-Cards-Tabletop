@@ -66,10 +66,18 @@ namespace ConsoleCards.Definitions
         public int gameDeckMinimum;
         public int gameDeckMaximum;
 
+        /// <summary>
+        /// STAGE-3 (owner, 2026-11-18): the game's own default values for some rules, set in CREATE › DECKS (the floor
+        /// deck counts): rule entry stable ID → value. They replace the rulebook's value at every table; a house rule
+        /// that changed the same entry still wins.
+        /// </summary>
+        public List<PlayerRuleValue> ruleValues = new List<PlayerRuleValue>();
+
         public bool IsEmpty => decks == null || decks.Count == 0;
 
         public PlayerDecksFile Normalised()
         {
+            if (ruleValues == null) ruleValues = new List<PlayerRuleValue>();
             if (decks == null) decks = new List<PlayerDeckRecord>();
             for (int i = 0; i < decks.Count; i++)
             {
@@ -87,6 +95,7 @@ namespace ConsoleCards.Definitions
             upper?.Normalised();
             merged.gameStableId = PlayerContent.FirstNonEmpty(upper?.gameStableId, lower?.gameStableId);
             PlayerContent.MergeById(merged.decks, upper?.decks, lower?.decks, d => d?.id);
+            PlayerContent.MergeById(merged.ruleValues, upper?.ruleValues, lower?.ruleValues, v => v?.entryId); // STAGE-3
             return merged.Normalised();
         }
     }
@@ -212,6 +221,14 @@ namespace ConsoleCards.Definitions
 
         /// <summary>STAGES-1: this stage's front pictures, by card.</summary>
         public List<PlayerDeckFront> fronts = new List<PlayerDeckFront>();
+    }
+
+    /// <summary>STAGE-3: one rule's value as the game's default (rule entry stable ID and its value).</summary>
+    [Serializable]
+    public sealed class PlayerRuleValue
+    {
+        public string entryId = string.Empty;
+        public string value = string.Empty;
     }
 
     /// <summary>STAGES-1: a card's front picture in one stage (an art key in the game's pictures).</summary>
