@@ -141,6 +141,10 @@ namespace ConsoleCards.Presentation.Composition
             // either end of a normal online room, where each computer plays its own seats and its moves go through the
             // host) asks the players sitting at it, each on their own screen at the same time (owner, 2026-11-09).
             if (host.privateViewActive || (host.HasOnline && host.Online.IsPrivateGuest)) return;
+            // STALE-JOIN (2026-11-18): a joined table that is no longer the host's (the room ended) asks nothing. Joining a
+            // new room set Assist to Full again, and this tick then asked about the old table: the question's popup closed
+            // the front end and put the player on the ended table.
+            if (host.HasOnline && host.Online.TableIsStale) return;
             bool privateHost = host.HasOnline && host.Online.IsPrivateHost;
             bool freshTable = !ReferenceEquals(avatarDraftMatch, host.matchState);
             if (freshTable)
@@ -244,6 +248,7 @@ namespace ConsoleCards.Presentation.Composition
                 }
 
                 if (!remote && !avatarDraftOpenHere.IsEmpty) continue; // one question at a time on this screen
+                if (!remote && host.runtimeUi.IsGameSelectOpen) continue; // STALE-JOIN: asked when the menu closes, never over it
                 if (!AskAvatarPick(setup, player, pile, remote, taken)) continue; // not sent: asked again next frame
                 avatarDraftAsked.Add(player);
                 if (!remote) avatarDraftOpenHere = player;
