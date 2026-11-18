@@ -295,6 +295,23 @@ namespace ConsoleCards.Presentation.Interaction
             return $"Support: {support}. Overlapping at the accepted place: {(others == 0 ? "none" : others + " (" + overlaps + (others > 4 ? ", …" : string.Empty) + ")")}.";
         }
 
+        // D4-FALL diagnostic: what this piece's box overlaps when its centre is at a place (event-time only).
+        private string OverlapsAt(Vector3 place)
+        {
+            if (physicalCollider == null) return string.Empty;
+            Bounds bounds = physicalCollider.bounds;
+            Vector3 centre = bounds.center - body.position + place;
+            int count = Physics.OverlapBoxNonAlloc(centre, bounds.extents * 0.9f, diagOverlaps, Quaternion.identity, ~0, QueryTriggerInteraction.Ignore);
+            string overlaps = string.Empty;
+            for (int i = 0; i < count; i++)
+            {
+                if (IsOwnCollider(diagOverlaps[i])) continue;
+                overlaps += (overlaps.Length > 0 ? ", " : string.Empty) + KindOf(diagOverlaps[i]) + " '" + diagOverlaps[i].name + "'";
+            }
+
+            return $"Box {bounds.size.x:0.00}x{bounds.size.y:0.00}x{bounds.size.z:0.00}; at the accepted place it overlaps: {(overlaps.Length == 0 ? "nothing" : overlaps)}.";
+        }
+
         private bool IsOwnCollider(Collider other) => other == null || other.attachedRigidbody == body || other.transform.IsChildOf(transform);
 
         private static string KindOf(Collider other)
@@ -1614,13 +1631,25 @@ namespace ConsoleCards.Presentation.Interaction
             {
                 if (!authority.MayCommitFirstState) return; // MP-2: online, a new piece's first resting place is the host's
                 PhysicalObjectState initial;
-                if (!authority.Surfaces.TryResolveAuthoredLooseObject(
+                bool resolved = authority.Surfaces.TryResolveAuthoredLooseObject(
                         view.BoundState.Pose,
                         actor,
                         physicalCollider,
                         view.BoundState.IsUserLocked,
-                        out initial))
-                    initial = Capture(PhysicalObjectMode.Dynamic); // Authored/template extraction may start off-table.
+                        out initial);
+                if (!resolved)
+                {
+                    // Authored/template extraction may start off-table.
+                    // D4-FALL (2026-11-18, live: "d4 first place: not over a table surface at y 11.600 (made at y 11.600)"):
+                    // the floor dice lie beside the board, outside the registered table surfaces, so the resolver finds
+                    // nothing there. The piece was then started where it was made: its CENTRE on the table plane, half
+                    // inside the table. The d6s were pushed out upward; the d4 (a pointed convex mesh) was pushed down
+                    // through the table top, fell to the floor and was brought back 10–13 m later. It now starts with
+                    // its own lowest point on that plane, a settling clearance up, as the resolver would place it.
+                    float lift = ComponentRestHeight.RestLift(transform) + PhysicalTabletopSurfaces.PlacementClearance;
+                    initial = State(body.position + (Vector3.up * lift), body.rotation, body.linearVelocity,
+                        body.angularVelocity, PhysicalObjectMode.Dynamic, actor);
+                }
                 if (!Commit(initial, null, AuthoritativeActionRecordMode.None)) return;
                 applied = null;
             }
@@ -1651,7 +1680,9 @@ namespace ConsoleCards.Presentation.Interaction
             if (far > 0f)
             {
                 Debug.LogWarning($"[Physics] {name} committed {state.Mode} {far:0.00} m from its accepted place ({boundMode}; applied here "
-                    + $"{appliedNote}) without a player action: accepted here (this computer controls it).");
+                    + $"{appliedNote}) without a player action: accepted here (this computer controls it). "
+                    + $"From ({bound.Position.X:0.00}, {bound.Position.Y:0.00}, {bound.Position.Z:0.00}) to "
+                    + $"({state.Position.X:0.00}, {state.Position.Y:0.00}, {state.Position.Z:0.00}). {OverlapsAt(Vector(bound.Position))}"); // D4-FALL diagnostic
             }
             // P8A (owner, 2026-11-13 live test: "the dice rolled 6 4 and it asked to collapse 6 6"; host log: "Rules die (d6)
             // thrown here: the host's result is 6 (it showed 4)"): on the host, a rules die the host's own player threw is
