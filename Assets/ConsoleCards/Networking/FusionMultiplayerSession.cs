@@ -490,7 +490,9 @@ namespace ConsoleCards.Networking
             bool changed = state != newState || status != newStatus;
             state = newState;
             status = newStatus;
-            if (changed) Debug.Log("[Online] " + newStatus);
+            // The status is shown on screen with the room code; the log never names it (owner rule: no room codes in logs).
+            if (changed) Debug.Log("[Online] " + (string.IsNullOrEmpty(roomCode) || newStatus == null
+                ? newStatus : newStatus.Replace(roomCode, RoomCodeForLog(roomCode))));
             Raise(Changed);
         }
 

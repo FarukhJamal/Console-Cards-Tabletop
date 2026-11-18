@@ -77,9 +77,9 @@ namespace ConsoleCards.Presentation.Composition
                 clientKey = book.KeyFor(roomCode, DateTime.UtcNow, out bool reused);
                 System.IO.Directory.CreateDirectory(folder);
                 System.IO.File.WriteAllText(file, book.Serialize());
-                Debug.Log(reused
-                    ? $"[Online] Using this profile's saved seat key for {roomCode}."
-                    : $"[Online] New seat key for {roomCode}.");
+                Debug.Log(reused // the room code is never logged
+                    ? "[Online] Using this profile's saved seat key for this room."
+                    : "[Online] New seat key for this room.");
             }
             catch (Exception exception)
             {
