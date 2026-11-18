@@ -1195,6 +1195,9 @@ namespace ConsoleCards.Presentation.Interaction
                 RecoverOutOfBounds();
                 return;
             } // NaN height never recovers
+            // PHY-1 REMOTE-REST: a moving piece another computer's player controls is simulated here between its
+            // controller's accepted states, but never committed from here (each try was refused: "Commit refused" notes).
+            if (!authority.ControlsHere(view.BoundState.PhysicalState)) return;
             dynamicFrames++;
 
             // TTS-FEEL: don't wait on Unity's energy-based sleep alone (dice can creep for seconds).
