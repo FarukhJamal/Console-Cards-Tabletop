@@ -97,7 +97,8 @@ namespace ConsoleCards.Presentation.Composition
             model.Tagline = chosen.PlayerGame != null
                 ? string.IsNullOrWhiteSpace(chosen.PlayerGame.description) ? "A game you made in CREATE." : chosen.PlayerGame.description
                 : taglines.TryGetValue(chosen.Id, out string chosenLine) ? chosenLine : GameDetail(chosen);
-            model.HowToPlay = HowToPlayLines(chosen);
+            model.HowToPlay = HowToPlayLines(chosen, // TILES-1: the Tiles are placed line follows the choice
+                IsTrapFloorEntry(chosen) ? TrapFloorCartridge.TilesName(ChosenTilesByPlayers(chosen)) : null);
             FillContinue(model, entries, chosen);
             gameSelectActions.PlayAgain = StartWithChosenColours;
             FillProfileBoard(model); // PROFILE-2 (boards 19, 19b)
@@ -134,7 +135,7 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // The first four rules of the game's own rules (a game you made: its first written lines).
-        private static IReadOnlyList<string> HowToPlayLines(GameSelectEntry entry)
+        private static IReadOnlyList<string> HowToPlayLines(GameSelectEntry entry, string tilesValue)
         {
             List<string> lines = new List<string>(4);
             if (entry.PlayerGame != null)
@@ -149,7 +150,8 @@ namespace ConsoleCards.Presentation.Composition
                 return lines;
             }
 
-            RulesCardModel rules = entry.Game != null ? RulesCardModel.FromRuleSet(entry.Game.DefaultRuleSet, null) : null;
+            RulesCardModel rules = entry.Game != null ? RulesCardModel.FromRuleSet(entry.Game.DefaultRuleSet, null,
+                tilesValue != null ? RuleSettingKeys.FloorPlacement : null, tilesValue) : null;
             if (rules == null) return lines;
             for (int i = 0; i < rules.Lines.Count && lines.Count < 4; i++)
             {

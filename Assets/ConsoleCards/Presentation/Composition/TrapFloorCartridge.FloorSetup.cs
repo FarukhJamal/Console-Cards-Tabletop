@@ -38,9 +38,14 @@ namespace ConsoleCards.Presentation.Composition
         internal bool FloorPlacedByPlayers()
         {
             if (PlayAssist.IsFree || host.trapFloorTemplate == null) return false;
-            RuleSetDefinition rules = host.RulesCardPanel.ActiveRuleSet;
+            if (FloorByPlayersChoice.HasValue) return FloorByPlayersChoice.Value; // TILES-1: the game sheet's choice
+            return RuleFloorByPlayers(host.RulesCardPanel.ActiveRuleSet, host.trapFloorTemplate.ActiveMode.StableId);
+        }
+
+        // TILES-1: what the rule set says, apart from the game sheet's choice (a null mode: the first entry).
+        internal static bool RuleFloorByPlayers(RuleSetDefinition rules, string modeStableId)
+        {
             if (rules == null) return false;
-            string modeStableId = host.trapFloorTemplate.ActiveMode.StableId;
             for (int s = 0; s < rules.Sections.Count; s++)
             {
                 RuleSection section = rules.Sections[s];

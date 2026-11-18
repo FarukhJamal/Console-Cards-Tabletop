@@ -79,7 +79,10 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             string modeStableId = host.ActiveCartridge.ActiveModeStableId;
-            RulesCardModel model = RulesCardModel.FromRuleSet(ActiveRuleSet, modeStableId);
+            bool? tiles = host.ActiveCartridge is TrapFloorCartridge ? host.TrapFloorGame.FloorByPlayersChoice : null;
+            RulesCardModel model = RulesCardModel.FromRuleSet(ActiveRuleSet, modeStableId,
+                tiles.HasValue ? RuleSettingKeys.FloorPlacement : null, // TILES-1: the game sheet's choice
+                tiles.HasValue ? TrapFloorCartridge.TilesName(tiles.Value) : null);
             if (model == null) return null;
             if (rulesCardActions == null)
             {
@@ -536,6 +539,7 @@ namespace ConsoleCards.Presentation.Composition
         // carrying the changes already in play) and put it in play. Text applies at once; settings at restart.
         internal void CommitRuleProposal()
         {
+            tilesRuleBefore = TrapFloorCartridge.RuleFloorByPlayers(ActiveRuleSet, null); // TILES-1
             RuleSetDefinition defaults = host.TableGame.DefaultRuleSet;
             if (ruleProposalEntryId == null)
             {
@@ -584,6 +588,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void FinishRuleCommit(string message)
         {
+            DropTilesChoiceIfRuleChanged();
             RefreshGameHints(); // tips follow the rules in play
             host.ActiveCartridge.RefreshShopEntry(); // the Shop opens or closes at once (owner, 2026-10-15)
             bool restartNeeded = host.templatesRuleSet != null && SettingsDiffer(host.templatesRuleSet, ActiveRuleSet);
@@ -601,6 +606,16 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
+        // TILES-1: the placement rule agreed at the table replaces the game sheet's Tiles are placed choice.
+        private bool tilesRuleBefore;
+
+        private void DropTilesChoiceIfRuleChanged()
+        {
+            if (!(host.ActiveCartridge is TrapFloorCartridge)) return;
+            if (TrapFloorCartridge.RuleFloorByPlayers(ActiveRuleSet, null) == tilesRuleBefore) return;
+            host.TrapFloorGame.FloorByPlayersChoice = null;
+        }
+
         /// <summary>
         /// Audit C-6, a joined computer: the rules the host put in play after everyone agreed. Empty JSON: the game's own
         /// rules. A set this computer does not have yet (made just now on the host) is added for this run.
@@ -608,6 +623,7 @@ namespace ConsoleCards.Presentation.Composition
         internal void UseRoomRules(string recordJson, string message)
         {
             EnsureHouseRulesLoaded();
+            tilesRuleBefore = TrapFloorCartridge.RuleFloorByPlayers(ActiveRuleSet, null); // TILES-1
             if (string.IsNullOrEmpty(recordJson))
             {
                 activeRuleSet = null;
@@ -639,6 +655,7 @@ namespace ConsoleCards.Presentation.Composition
             ruleProposalAgreeing = false;
             host.ruleProposalOpen = false;
             host.runtimeUi?.CloseRuleProposal();
+            DropTilesChoiceIfRuleChanged();
             RefreshGameHints();
             host.ActiveCartridge.RefreshShopEntry();
             RefreshRulesCard();

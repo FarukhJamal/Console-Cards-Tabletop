@@ -40,6 +40,7 @@ namespace ConsoleCards.Presentation.Composition
         public string PlayerGame; // MP-4: a game the host made (its save, JSON), else empty
         public Guid[] CarriedAvatars; // P8A: each seat's Avatar the floor was dealt with (Guid.Empty: none), else empty
         public int StageIndex; // P8A: the stage the floor belongs to
+        public int FloorByPlayers = -1; // TILES-1: the game sheet's Tiles are placed (-1: the rule, 0 at random, 1 by the players)
     }
 
     internal sealed class OnlineTablePacket
@@ -892,6 +893,7 @@ namespace ConsoleCards.Presentation.Composition
                 PlayerGame = host.PlayerGamesPanel.activePlayerGame != null ? JsonUtility.ToJson(host.PlayerGamesPanel.activePlayerGame) : string.Empty,
                 CarriedAvatars = DealtAvatarsForSetup(),
                 StageIndex = host.trapFloorStageIndex,
+                FloorByPlayers = host.TrapFloorGame.FloorByPlayersChoice.HasValue ? (host.TrapFloorGame.FloorByPlayersChoice.Value ? 1 : 0) : -1,
             };
         }
 
@@ -1140,6 +1142,7 @@ namespace ConsoleCards.Presentation.Composition
                 selection = TabletopSessionSelection.FromGameTemplate(template);
                 host.TrapFloorGame.PendingWinMode = setup.WinMode >= 0 ? (TrapFloorWinMode)setup.WinMode : (TrapFloorWinMode?)null;
                 host.TrapFloorGame.PendingAnticlockwise = setup.Anticlockwise >= 0 ? setup.Anticlockwise == 1 : (bool?)null;
+                host.TrapFloorGame.SetPendingFloorChoice(setup.FloorByPlayers >= 0 ? setup.FloorByPlayers == 1 : (bool?)null); // TILES-1
             }
             else
             {
@@ -1228,6 +1231,7 @@ namespace ConsoleCards.Presentation.Composition
 
             host.TrapFloorGame.PendingWinMode = null;
             host.TrapFloorGame.PendingAnticlockwise = null;
+            host.TrapFloorGame.ClearPendingFloorChoice(); // TILES-1
             host.trapFloorNextFloorIndex = Mathf.Max(0, floor);
             try
             {

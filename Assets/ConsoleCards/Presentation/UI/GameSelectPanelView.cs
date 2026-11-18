@@ -25,6 +25,9 @@ namespace ConsoleCards.Presentation.UI
         public string WinModeText = string.Empty;
         public bool ShowTurns;
         public string TurnsText = string.Empty;
+        // TILES-1: "Tiles are placed" (At random / By the players), Trap Floor only.
+        public bool ShowTiles;
+        public string TilesText = string.Empty;
         public string Rules = string.Empty;
         public string Deck = string.Empty;
         public bool CanChangeDeck;
@@ -217,6 +220,7 @@ namespace ConsoleCards.Presentation.UI
         public Action<int> CyclePlayers;
         public Action<int> CycleWinMode;
         public Action<int> CycleTurns;
+        public Action<int> CycleTiles;
         public Action<int> CycleDeck;
         public Action OpenProfile;
         public Action OpenCardArt;

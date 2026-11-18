@@ -83,8 +83,11 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>
         /// Builds the card for one mode of a rule set: sections in order, rules filtered by mode, setting values in
         /// bold, and a mark on every line that differs from the set it is based on. Null when nothing applies.
+        /// TILES-1: <paramref name="settingKey"/> / <paramref name="settingValue"/> show one setting's value as chosen
+        /// for this game (the game sheet's Tiles are placed) in place of the rule set's.
         /// </summary>
-        public static RulesCardModel FromRuleSet(RuleSetDefinition set, string modeStableId)
+        public static RulesCardModel FromRuleSet(RuleSetDefinition set, string modeStableId,
+            string settingKey = null, string settingValue = null)
         {
             if (set == null)
             {
@@ -119,7 +122,10 @@ namespace ConsoleCards.Presentation.UI
                     lines.Add(new RulesCardLine(
                         RulesCardLineKind.Rule,
                         section.Numbered ? number.ToString() : "•",
-                        entry.FormatText("<b>{0}</b>"),
+                        (settingKey != null && settingValue != null
+                            && string.Equals(entry.SettingKey, settingKey, StringComparison.Ordinal)
+                                ? entry.WithChange(null, settingValue)
+                                : entry).FormatText("<b>{0}</b>"),
                         RuleSetComparison.IsChanged(set, entry),
                         entry.StableId));
                 }

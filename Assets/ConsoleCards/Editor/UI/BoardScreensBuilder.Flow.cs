@@ -399,6 +399,7 @@ namespace ConsoleCards.Editor.UI
 
             ChoiceRow(setup, "Difficulty", "Difficulty");
             ChoiceRow(setup, "WinMode", "Win mode");
+            ChoiceRow(setup, "Tiles", "Tiles are placed"); // TILES-1
             RectTransform more = Flow(setup, "More", 46);
             Sprite dash = AssetDatabase.LoadAssetAtPath<Sprite>(HudArtPath + "HudDashFrame.png");
             Image moreFill = AddBox(more, Well, null);
@@ -478,7 +479,7 @@ namespace ConsoleCards.Editor.UI
             return image;
         }
 
-        // Difficulty, Win mode, Turns, Deck: the name on the left, ‹ value › on the right.
+        // Difficulty, Win mode, Tiles, Turns, Deck: the name on the left, ‹ value › on the right.
         private static void ChoiceRow(RectTransform column, string name, string title)
         {
             RectTransform row = Flow(column, name, 48);

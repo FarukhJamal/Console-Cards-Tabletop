@@ -96,6 +96,7 @@ namespace ConsoleCards.Presentation.Composition
             host.EnsureContentArt();
             host.TrapFloorGame.PendingWinMode = null; // MODE-1: a choice from a menu left without dealing is dropped
             host.TrapFloorGame.PendingAnticlockwise = null;
+            host.TrapFloorGame.ClearPendingFloorChoice(); // TILES-1
             List<GameSelectEntry> entries = GameSelectEntries();
             if (FindGameSelectEntry(entries, gameSelectEntryId) == null)
             {
@@ -122,6 +123,7 @@ namespace ConsoleCards.Presentation.Composition
                     CyclePlayers = CycleGamePlayers,
                     CycleWinMode = CycleGameWinMode,
                     CycleTurns = CycleGameTurns,
+                    CycleTiles = CycleGameTiles,
                     CycleDeck = CycleGameDeck,
                     OpenProfile = () => OpenFromGameSelect(host.ProfilePanel.OpenProfilePanel),
                     OpenCardArt = () => OpenFromGameSelect(host.OpenCardArtPanel),
@@ -195,6 +197,8 @@ namespace ConsoleCards.Presentation.Composition
                 WinModeText = IsTrapFloorEntry(entry) ? TrapFloorCartridge.WinModeName(ChosenWinMode()) : string.Empty,
                 ShowTurns = IsTrapFloorEntry(entry) && ChosenPlayerCount(entry) > 2,
                 TurnsText = TrapFloorCartridge.TurnsName(ChosenAnticlockwise()),
+                ShowTiles = IsTrapFloorEntry(entry),
+                TilesText = IsTrapFloorEntry(entry) ? Capitalise(TrapFloorCartridge.TilesName(ChosenTilesByPlayers(entry))) : string.Empty,
                 Rules = isEmpty ? "No rules: free play with the platform's components." : GameRulesText(entry),
                 Deck = DeckLineText(entry, out bool canChangeDeck),
                 CanChangeDeck = canChangeDeck,
@@ -747,6 +751,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private int gameSelectWinMode = -1;
         private int gameSelectTurns = -1;
+        private int gameSelectTiles = -1; // TILES-1: -1 not changed here, 0 at random, 1 by the players
 
         private bool IsTrapFloorEntry(GameSelectEntry entry) =>
             entry != null
@@ -767,6 +772,30 @@ namespace ConsoleCards.Presentation.Composition
             if (!IsTrapFloorEntry(FindGameSelectEntry(entries, gameSelectEntryId))) return;
             gameSelectWinMode = ((((int)ChosenWinMode() + step) % 3) + 3) % 3;
             ShowGameSelect(TrapFloorCartridge.WinModeHint(ChosenWinMode()), entries);
+        }
+
+        // TILES-1: the choice made before, else the rule in play for this game (its house rules when it is on the table).
+        private bool ChosenTilesByPlayers(GameSelectEntry entry)
+        {
+            if (gameSelectTiles >= 0) return gameSelectTiles == 1;
+            if (host.TrapFloorGame.FloorByPlayersChoice.HasValue) return host.TrapFloorGame.FloorByPlayersChoice.Value;
+            RuleSetDefinition rules = entry != null && entry.Game != null && host.TableGame != entry.Game
+                ? entry.Game.DefaultRuleSet
+                : host.RulesCardPanel.ActiveRuleSet;
+            return TrapFloorCartridge.RuleFloorByPlayers(rules, null);
+        }
+
+        private static string Capitalise(string text) =>
+            string.IsNullOrEmpty(text) ? string.Empty : char.ToUpperInvariant(text[0]) + text.Substring(1);
+
+        internal void CycleGameTiles(int step)
+        {
+            List<GameSelectEntry> entries = GameSelectEntries();
+            GameSelectEntry entry = FindGameSelectEntry(entries, gameSelectEntryId);
+            if (!IsTrapFloorEntry(entry)) return;
+            bool byPlayers = !ChosenTilesByPlayers(entry);
+            gameSelectTiles = byPlayers ? 1 : 0;
+            ShowGameSelect(TrapFloorCartridge.TilesHint(byPlayers), entries);
         }
 
         internal void CycleGameTurns(int step)
@@ -862,8 +891,10 @@ namespace ConsoleCards.Presentation.Composition
                 // keeps the game in play as it is).
                 host.TrapFloorGame.PendingWinMode = ChosenWinMode();
                 host.TrapFloorGame.PendingAnticlockwise = ChosenAnticlockwise();
+                if (gameSelectTiles >= 0) host.TrapFloorGame.SetPendingFloorChoice(gameSelectTiles == 1); // TILES-1
                 gameSelectWinMode = -1;
                 gameSelectTurns = -1;
+                gameSelectTiles = -1;
             }
 
             if (online)

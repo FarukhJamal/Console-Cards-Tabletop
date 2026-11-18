@@ -52,6 +52,13 @@ namespace ConsoleCards.Presentation.Composition
         internal TrapFloorWinMode? PendingWinMode { get; set; }
         internal bool? PendingAnticlockwise { get; set; }
 
+        // TILES-1 (owner, 2026-11-18, option A): "Tiles are placed" chosen on the game sheet like the win mode.
+        // Null: the rule in play decides (rulebook › Setup); true: by the players; false: at random. Kept for the next
+        // floors, Play Again and Reset; a rules change to the placement agreed at the table drops it.
+        internal bool? FloorByPlayersChoice { get; set; }
+        internal bool PendingFloorChoiceSet { get; set; }
+        internal bool? PendingFloorByPlayers { get; set; }
+
         // The mode the next deal is made for (the choice just made in New table…, else the mode in play).
         internal TrapFloorWinMode DealWinMode => PendingWinMode ?? WinMode;
 
@@ -59,8 +66,24 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (PendingWinMode.HasValue) WinMode = PendingWinMode.Value;
             if (PendingAnticlockwise.HasValue) Anticlockwise = PendingAnticlockwise.Value;
+            if (PendingFloorChoiceSet) FloorByPlayersChoice = PendingFloorByPlayers;
             PendingWinMode = null;
             PendingAnticlockwise = null;
+            PendingFloorChoiceSet = false;
+            PendingFloorByPlayers = null;
+        }
+
+        // TILES-1: the next deal's tile placement (null: leave the choice as it is).
+        internal void SetPendingFloorChoice(bool? byPlayers)
+        {
+            PendingFloorChoiceSet = true;
+            PendingFloorByPlayers = byPlayers;
+        }
+
+        internal void ClearPendingFloorChoice()
+        {
+            PendingFloorChoiceSet = false;
+            PendingFloorByPlayers = null;
         }
 
         internal static string WinModeName(TrapFloorWinMode mode)
@@ -84,6 +107,16 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         internal static string TurnsName(bool anticlockwise) => anticlockwise ? "Anticlockwise" : "Clockwise";
+
+        // TILES-1: the rule's own words ("Tiles are placed at random." / "Tiles are placed by the players.").
+        internal const string FloorPlacementAtRandom = "at random";
+
+        internal static string TilesName(bool byPlayers) =>
+            byPlayers ? ConsoleCards.GameTemplates.Definitions.RuleSettingKeys.FloorPlacementPlayers : FloorPlacementAtRandom;
+
+        internal static string TilesHint(bool byPlayers) => byPlayers
+            ? "By the players: in the Buy Phase the players lay the floor's tiles out face down themselves."
+            : "At random: the game deals the floor's tiles face down at random.";
 
         // Owner, 2026-11-04 (TRAP CARDS rules) and rules v1.151126 (2026-11-16): what each floor holds in each mode.
         //   Team Play:    6×6 3 Keys, Grand + Secret · 5×5 2 Keys, Grand · 4×4 2 Keys, Grand

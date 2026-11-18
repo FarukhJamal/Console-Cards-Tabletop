@@ -507,6 +507,7 @@ namespace ConsoleCards.Presentation.Composition
             if (host.activeSession == null) return;
             PendingWinMode = null; // MODE-1: the next floor keeps this game's win mode and turn direction
             PendingAnticlockwise = null;
+            ClearPendingFloorChoice(); // TILES-1: the choice itself (FloorByPlayersChoice) stays for the next floors
             host.trapFloorNextFloorIndex = floorIndex;
             host.trapFloorNextStageIndex = floorIndex == 0 ? Math.Max(0, stageIndex) : host.trapFloorStageIndex;
             // D3 / P8A (owner, 2026-11-13: "Avatar selection happens once per run"): a run that goes on keeps each seat's
