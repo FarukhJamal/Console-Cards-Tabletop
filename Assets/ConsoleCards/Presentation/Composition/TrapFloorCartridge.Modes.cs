@@ -135,7 +135,8 @@ namespace ConsoleCards.Presentation.Composition
             bool secret = mode != TrapFloorWinMode.Survival
                 && (floorIndex == 0 || (floorIndex == 1 && mode == TrapFloorWinMode.FreeForAll));
             TrapFloorFloorRecipe recipe = new TrapFloorFloorRecipe(3, keys, secret, 1, traps, abilities, friends, tileCounts,
-                mode == TrapFloorWinMode.TeamPlay ? null : TeamOnlyTag); // rules v1.151126: Insurance and Lasso are Team Play only
+                mode == TrapFloorWinMode.TeamPlay ? null : TeamOnlyTag, // rules v1.151126: Insurance and Lasso are Team Play only
+                mode != TrapFloorWinMode.TeamPlay); // rules v1.151126: Free for all and Survival hold exactly 1 Copper Key
             return ExactDeck(mode, floorIndex, difficultyStableId, out int deckFriends, out int deckAbilities, out int deckTraps, out int deckFalls)
                 ? recipe.WithExactDeck(deckFriends, deckAbilities, deckTraps, deckFalls)
                 : recipe;

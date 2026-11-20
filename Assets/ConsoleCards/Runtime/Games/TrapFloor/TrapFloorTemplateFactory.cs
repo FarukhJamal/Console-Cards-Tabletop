@@ -977,6 +977,13 @@ namespace ConsoleCards.Games.TrapFloor
             {
                 for (int i = 0; i < groups.Count; i++)
                 {
+                    // Rules v1.151126: the Copper Key is only on Free for all and Survival floors.
+                    if (groups[i].Kind == FloorGroupKind.Keys && !recipe.CopperKey)
+                    {
+                        groups[i].Pool.RemoveAll(content => IsCopperKey(content));
+                        groups[i].Count = Math.Min(groups[i].Count, groups[i].MaximumCount);
+                    }
+
                     if (groups[i].Kind != FloorGroupKind.Other) continue;
                     if (!string.IsNullOrEmpty(recipe.ExcludedTag))
                     {
@@ -1032,6 +1039,19 @@ namespace ConsoleCards.Games.TrapFloor
                 {
                     DrawExactTraps(groups[i].ContentSet, groups[i].Pool, groups[i].Count, recipe.ExactFallTraps, randomValueSource, drawn);
                     continue;
+                }
+
+                if (recipe != null && recipe.CopperKey && groups[i].Kind == FloorGroupKind.Keys && groups[i].Count > 0)
+                {
+                    // Rules v1.151126: exactly 1 of the floor's Keys is the Copper Key; the others are drawn from the rest.
+                    TrapFloorFloorContentDefinition copper = groups[i].Pool.Find(content => IsCopperKey(content));
+                    if (copper != null)
+                    {
+                        drawn.Add(copper);
+                        groups[i].Pool.RemoveAll(content => IsCopperKey(content));
+                        DrawFloorGroup(groups[i].ContentSet, groups[i].Pool, groups[i].Count - 1, randomValueSource, drawn);
+                        continue;
+                    }
                 }
 
                 DrawFloorGroup(groups[i].ContentSet, groups[i].Pool, groups[i].Count, randomValueSource, drawn);
@@ -1555,6 +1575,19 @@ namespace ConsoleCards.Games.TrapFloor
 
         // Without repeats the group is partly shuffled and its first cards taken; with repeats every draw picks
         // from the whole pool again.
+        internal const string CopperKeyTag = "copper-key";
+
+        private static bool IsCopperKey(TrapFloorFloorContentDefinition content)
+        {
+            IReadOnlyList<string> tags = content != null && content.AuthoredCard != null ? content.AuthoredCard.Tags : null;
+            for (int i = 0; tags != null && i < tags.Count; i++)
+            {
+                if (string.Equals(tags[i], CopperKeyTag, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+
+            return false;
+        }
+
         private static void DrawFloorGroup(
             GameContentSetData contentSet,
             List<TrapFloorFloorContentDefinition> pool,

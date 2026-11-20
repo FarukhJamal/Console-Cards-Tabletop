@@ -27,9 +27,11 @@ namespace ConsoleCards.Games.TrapFloor
             double abilityWeight,
             double friendWeight,
             IReadOnlyDictionary<string, int> tileCounts,
-            string excludedTag = null)
+            string excludedTag = null,
+            bool copperKey = false)
         {
             ExcludedTag = excludedTag;
+            CopperKey = copperKey;
             if (floorCount < 1) throw new ArgumentOutOfRangeException(nameof(floorCount));
             if (keyCount < 0) throw new ArgumentOutOfRangeException(nameof(keyCount));
             if (requiredKeys < 1) throw new ArgumentOutOfRangeException(nameof(requiredKeys));
@@ -67,13 +69,19 @@ namespace ConsoleCards.Games.TrapFloor
             if (traps < 0) throw new ArgumentOutOfRangeException(nameof(traps));
             if (fallTraps < 0 || fallTraps > traps) throw new ArgumentOutOfRangeException(nameof(fallTraps));
             TrapFloorFloorRecipe copy = new TrapFloorFloorRecipe(
-                FloorCount, KeyCount, SecretExit, RequiredKeys, TrapWeight, AbilityWeight, FriendWeight, TileCounts, ExcludedTag);
+                FloorCount, KeyCount, SecretExit, RequiredKeys, TrapWeight, AbilityWeight, FriendWeight, TileCounts, ExcludedTag, CopperKey);
             copy.ExactFriends = friends;
             copy.ExactAbilities = abilities;
             copy.ExactTraps = traps;
             copy.ExactFallTraps = fallTraps;
             return copy;
         }
+
+        /// <summary>
+        /// Rules v1.151126: true when this floor's Keys include exactly one Copper Key (Free for all and Survival: 4 Keys,
+        /// 1 of them Copper); false leaves the Copper Key off the floor (Team Play keeps its original Keys).
+        /// </summary>
+        public bool CopperKey { get; }
 
         /// <summary>A card tag this mode leaves off the floor (Free for all: "lasso"); null: none.</summary>
         public string ExcludedTag { get; }
