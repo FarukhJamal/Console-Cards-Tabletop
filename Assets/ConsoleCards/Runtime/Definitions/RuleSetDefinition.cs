@@ -108,6 +108,23 @@ namespace ConsoleCards.Definitions
             };
         }
 
+        /// <summary>RULES-SHEET (R1): an entry made at runtime, for a made game's rules sheet.</summary>
+        public static RuleEntry Create(string stableId, string text, RuleSettingKind kind, string key, string value,
+            IReadOnlyList<string> choices = null)
+        {
+            return new RuleEntry
+            {
+                stableId = stableId,
+                text = text,
+                settingKind = kind,
+                settingKey = key,
+                value = value,
+                displayValue = string.Empty,
+                modeStableIds = new List<string>(),
+                choices = choices != null ? new List<string>(choices) : new List<string>(),
+            };
+        }
+
         /// <summary>The text with {value} replaced; <paramref name="valueFormat"/> wraps the value (e.g. bold).</summary>
         public string FormatText(string valueFormat = "{0}")
         {
@@ -144,6 +161,10 @@ namespace ConsoleCards.Definitions
 
             return copy;
         }
+
+        /// <summary>RULES-SHEET (R1): a section made at runtime, for a made game's rules sheet.</summary>
+        public static RuleSection Create(string heading, bool numbered, List<RuleEntry> entries) =>
+            new RuleSection { heading = heading, numbered = numbered, entries = entries ?? new List<RuleEntry>() };
 
         public string Heading => heading ?? string.Empty;
         public bool Numbered => numbered;
@@ -220,6 +241,22 @@ namespace ConsoleCards.Definitions
                 if (basedOn.sections[i] != null) set.sections.Add(basedOn.sections[i].WithChanges(changes));
             }
 
+            return set;
+        }
+
+        /// <summary>
+        /// RULES-SHEET (R1): a default set made at runtime from sections (a made game's rules sheet); never saved as
+        /// an asset. The caller destroys it when it is replaced.
+        /// </summary>
+        public static RuleSetDefinition CreateRuntime(string stableId, string displayName, string gameStableId, List<RuleSection> sections)
+        {
+            RuleSetDefinition set = CreateInstance<RuleSetDefinition>();
+            set.name = displayName;
+            set.hideFlags = HideFlags.DontSave;
+            set.stableId = stableId;
+            set.displayName = displayName;
+            set.gameStableId = gameStableId;
+            set.sections = sections ?? new List<RuleSection>();
             return set;
         }
 

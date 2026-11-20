@@ -19,7 +19,7 @@ namespace ConsoleCards.Editor.UI
     public static partial class TableHudBuilder
     {
         public const string MakeGamePath = Folder + "MakeGamePanel.prefab";
-        private const string MakeGameLabel = "MakeGameBoard13b"; // b: the done steps' tick
+        private const string MakeGameLabel = "MakeGameBoard13d"; // d: four step helps // c: the RULES step (RULES-SHEET R2, 2026-11-20) // b: the done steps' tick
 
         private static readonly Color Teal13 = UiKit.Hex("138a8c");
         private static readonly Color Green13 = UiKit.Hex("2fd46b");
@@ -54,15 +54,15 @@ namespace ConsoleCards.Editor.UI
             // ---------- the top bar ----------
             RectTransform bar = B.Box(root, "TopBar", 20, 16, 1240, 60, B.Panel, B.Edge, 1f);
             Text title = B.TextAt(bar, "Title", 13, 0, 160, 60, B.bold, 15, B.Words, TextAnchor.MiddleLeft, "MAKE A GAME");
-            float[] stepX = { 160, 286, 426, 545 };
-            float[] stepW = { 96, 110, 96, 101 };
-            string[] names = { "DECK", "CARDS", "DEAL", "SAVE" };
-            Button[] stepButtons = new Button[4];
-            Text[] stepLabels = new Text[4];
-            GameObject[] doneMarks = new GameObject[4];
-            GameObject[] numberMarks = new GameObject[4];
-            Image[] pills = new Image[4];
-            for (int i = 0; i < 4; i++)
+            float[] stepX = { 160, 286, 426, 552, 686 };
+            float[] stepW = { 96, 110, 96, 104, 101 };
+            string[] names = { "DECK", "CARDS", "DEAL", "RULES", "SAVE" };
+            Button[] stepButtons = new Button[5];
+            Text[] stepLabels = new Text[5];
+            GameObject[] doneMarks = new GameObject[5];
+            GameObject[] numberMarks = new GameObject[5];
+            Image[] pills = new Image[5];
+            for (int i = 0; i < 5; i++)
             {
                 RectTransform step = B.Rect(bar, "Step" + (i + 1), stepX[i], 9, stepW[i], 42);
                 Image catcher = step.gameObject.AddComponent<Image>();
@@ -86,11 +86,11 @@ namespace ConsoleCards.Editor.UI
                 B.TextAt(number, "Digit", 0, 0, 22, 22, B.bold, 12, B.Ink, TextAnchor.MiddleCenter, (i + 1).ToString());
                 numberMarks[i] = number.gameObject;
                 stepLabels[i] = B.TextAt(step, "Label", 38, 0, stepW[i] - 40, 42, B.bold, 13, B.Muted, TextAnchor.MiddleLeft, names[i]);
-                if (i < 3) B.TextAt(bar, "Dash" + i, stepX[i] + stepW[i] + 2, 0, 24, 60, B.medium, 13, B.Faint, TextAnchor.MiddleCenter, "–");
+                if (i < 4) B.TextAt(bar, "Dash" + i, stepX[i] + stepW[i] + 2, 0, 24, 60, B.medium, 13, B.Faint, TextAnchor.MiddleCenter, "–");
             }
 
-            B.TextAt(bar, "Note", 700, 0, 464, 60, B.medium, 12, B.Muted, TextAnchor.MiddleRight,
-                "Steps can be done in any order · the table stays live");
+            B.TextAt(bar, "Note", 800, 0, 364, 60, B.medium, 12, B.Muted, TextAnchor.MiddleRight,
+                "Steps in any order · the table stays live");
             Button exit = B.SmallButton(bar, "Exit", 1170, 12, 57, 36, "EXIT", B.Edge, B.Words);
 
             // ---------- the left panel: a step, or the details on SAVE ----------
@@ -173,13 +173,15 @@ namespace ConsoleCards.Editor.UI
             Text summary = B.TextAt(saved, "Summary", 15, 250, 310, 30, B.medium, 12, B.Muted, TextAnchor.UpperLeft, string.Empty);
             summary.gameObject.SetActive(false); // WHAT GETS SAVED has it row by row
 
-            // ---------- the three steps ----------
+            // ---------- the four steps before SAVE ----------
             RectTransform help = B.Box(root, "Steps", 600, 448, 660, 256, B.Panel, B.Edge, 1f);
-            StepHelp13(help, 15, "1 · DECK", "Pick which decks start on the table. NEW DECK opens the Deck builder.");
-            B.Line(help, "Rule1", 220, 15, 1, 226, B.Edge);
-            StepHelp13(help, 235, "2 · CARDS", "Change any card's words or picture. Opens the Card studio, comes back here.");
-            B.Line(help, "Rule2", 440, 15, 1, 226, B.Edge);
-            StepHelp13(help, 455, "3 · DEAL", "How many cards each hand gets at START, and who goes first.");
+            StepHelp13(help, 15, "1 · DECK", "Pick which decks start on the table. NEW DECK opens the Deck builder.", 145);
+            B.Line(help, "Rule1", 168, 15, 1, 226, B.Edge);
+            StepHelp13(help, 180, "2 · CARDS", "Change any card's words or picture. Opens the Card studio, comes back here.", 145);
+            B.Line(help, "Rule2", 333, 15, 1, 226, B.Edge);
+            StepHelp13(help, 345, "3 · DEAL", "How many cards each hand gets at START, and who goes first.", 145);
+            B.Line(help, "Rule3", 498, 15, 1, 226, B.Edge);
+            StepHelp13(help, 510, "4 · RULES", "The rules sheet: turns, limits, scoring. Empty fields: the players decide.", 140);
 
             // A cancel button the view needs; EXIT does the same.
             Button cancel = B.SmallButton(root, "Cancel", 0, 0, 10, 10, string.Empty, B.Edge, B.Words);
@@ -315,10 +317,10 @@ namespace ConsoleCards.Editor.UI
             return button;
         }
 
-        private static void StepHelp13(Transform parent, float x, string title, string text)
+        private static void StepHelp13(Transform parent, float x, string title, string text, float width = 190f)
         {
-            B.TextAt(parent, "Title" + title.Substring(0, 1), x, 15, 190, 20, B.bold, 13, B.Words, TextAnchor.MiddleLeft, title);
-            Text body = B.TextAt(parent, "Text" + title.Substring(0, 1), x, 40, 190, 120, B.medium, 12, B.Soft,
+            B.TextAt(parent, "Title" + title.Substring(0, 1), x, 15, width, 20, B.bold, 13, B.Words, TextAnchor.MiddleLeft, title);
+            Text body = B.TextAt(parent, "Text" + title.Substring(0, 1), x, 40, width, 120, B.medium, 12, B.Soft,
                 TextAnchor.UpperLeft, text);
             body.horizontalOverflow = HorizontalWrapMode.Wrap;
         }

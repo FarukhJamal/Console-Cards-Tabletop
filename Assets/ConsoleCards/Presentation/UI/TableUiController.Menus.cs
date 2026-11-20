@@ -95,7 +95,7 @@ namespace ConsoleCards.Presentation.UI
         private void HideHudUnderMakeGame()
         {
             bool hide = UsesTableHud
-                && (IsVisible(gameSavePanelView) || physicalRulebookReading || IsVisible(tableSettingsView)
+                && (IsVisible(gameSavePanelView) || IsVisible(rulesSheetPanelView) || physicalRulebookReading || IsVisible(tableSettingsView)
                     || IsVisible(tablePanelView) // board 12: the Table editor has its own bars
                     || IsVisible(pauseMenuView)
                     || (componentToolboxView != null && componentToolboxView.IsAcquired && componentToolboxView.IsPanelOpen));

@@ -12,20 +12,24 @@ namespace ConsoleCards.Presentation.UI
         public string Name = string.Empty;
         public string Description = string.Empty;
         public string RulesText = string.Empty;
+
+        /// <summary>RULES-SHEET (R2): the rules sheet as preview lines ("#" starts a section heading), shown first.</summary>
+        public System.Collections.Generic.IReadOnlyList<string> SheetPreview = Array.Empty<string>();
         public int MinimumPlayers = 1;
         public int MaximumPlayers = 4;
         public bool CanSaveOver;
         public string SaveOverText = "Save over";
         public string Status = string.Empty;
 
-        // The steps (L2-6b, DEAL-1): 0 Deck, 1 Cards, 2 Deal, 3 Save. The Deck, Cards and Deal steps show a title, a
+        // The steps (L2-6b, DEAL-1, RULES-SHEET R2): 0 Deck, 1 Cards, 2 Deal, 3 Rules, 4 Save. The Deck, Cards and Deal steps show a title, a
         // text, an optional < choice > line and up to two action buttons (empty text hides one); the Save step shows
         // the details.
         public const int DeckStep = 0;
         public const int CardsStep = 1;
         public const int DealStep = 2;
-        public const int SaveStep = 3;
-        public const int StepCount = 4;
+        public const int RulesStep = 3;
+        public const int SaveStep = 4;
+        public const int StepCount = 5;
         public int Step = SaveStep;
         public string StepTitle = string.Empty;
         public string StepText = string.Empty;
@@ -132,7 +136,7 @@ namespace ConsoleCards.Presentation.UI
         private GameSaveActions actions;
         private int step = GameSaveModel.SaveStep;
 
-        private static readonly string[] StepNames = { "1 · Deck", "2 · Cards", "3 · Deal", "4 · Save" };
+        private static readonly string[] StepNames = { "1 · Deck", "2 · Cards", "3 · Deal", "4 · Rules", "5 · Save" };
 
         /// <summary>True when the prefab has the steps (Deck, Cards, Save).</summary>
         public bool HasSteps =>

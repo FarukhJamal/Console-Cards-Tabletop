@@ -115,6 +115,7 @@ namespace ConsoleCards.Presentation.Composition
             saveStep = GameSaveModel.DeckStep;
             saveDeal = from != null && DealRule.TryParse(from.deal, out DealRule deal) ? deal : null;
             saveMinutes = from != null && from.minutes > 0 ? from.minutes : 20;
+            LoadSaveSheet(from); // RULES-SHEET (R2)
             ShowGameSave(string.Empty);
         }
 
@@ -246,6 +247,8 @@ namespace ConsoleCards.Presentation.Composition
                 deck = gameDeck,
                 deal = saveDeal != null ? saveDeal.ToNotation() : string.Empty,
                 minutes = saveMinutes,
+                sheet = new List<SheetValue>(saveSheet), // RULES-SHEET (R2)
+                sheetText = new List<SheetText>(saveSheetText),
             };
             if (!PlayerGames().Save(game, out string error))
             {
@@ -279,7 +282,7 @@ namespace ConsoleCards.Presentation.Composition
             int count = hasDeck ? SaveDeckCards(deck, out lines, out different).Count : 0;
             if (saveStep == GameSaveModel.DeckStep)
             {
-                model.StepTitle = "STEP 1 OF 4 · YOUR GAME'S DECK";
+                model.StepTitle = "STEP 1 OF 5 · YOUR GAME'S DECK";
                 model.ShowPicker = true;
                 model.PickText = hasDeck ? $"{deck.Name} · {CountText(count, "card")}" : "No deck";
                 model.ActionAText = "New deck…";
@@ -317,7 +320,13 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            model.StepTitle = "STEP 2 OF 4 · CARDS";
+            if (saveStep == GameSaveModel.RulesStep)
+            {
+                FillRulesStep(model);
+                return;
+            }
+
+            model.StepTitle = "STEP 2 OF 5 · CARDS";
             model.ShowPicker = false;
             if (!hasDeck)
             {
@@ -350,7 +359,7 @@ namespace ConsoleCards.Presentation.Composition
         // a time into hands. The game deals this way when it starts, and Deal on its deck follows it.
         internal void FillDealStep(GameSaveModel model, DeckChoice deck, bool hasDeck)
         {
-            model.StepTitle = "STEP 3 OF 4 · DEALING";
+            model.StepTitle = "STEP 3 OF 5 · DEALING";
             model.ShowPicker = true;
             DealRule deal = saveDeal;
             model.PickText = deal == null
@@ -412,6 +421,12 @@ namespace ConsoleCards.Presentation.Composition
         internal void SaveStepActionA(GameSaveTyped typed)
         {
             KeepTyped(typed);
+            if (saveStep == GameSaveModel.RulesStep)
+            {
+                OpenRulesSheet();
+                return;
+            }
+
             if (saveStep == GameSaveModel.DealStep)
             {
                 if (saveDeal != null) saveDeal.To = saveDeal.To == DealDestination.Hand ? DealDestination.Table : DealDestination.Hand;
@@ -427,6 +442,13 @@ namespace ConsoleCards.Presentation.Composition
         internal void SaveStepActionB(GameSaveTyped typed)
         {
             KeepTyped(typed);
+            if (saveStep == GameSaveModel.RulesStep)
+            {
+                ClearSaveSheet();
+                ShowGameSave("The rules sheet is cleared. It is saved that way only when you SAVE.");
+                return;
+            }
+
             if (saveStep == GameSaveModel.DealStep)
             {
                 if (saveDeal != null && saveDeal.To == DealDestination.Table) saveDeal.Face = saveDeal.Face == DealFace.Down ? DealFace.Up : DealFace.Down;
@@ -946,6 +968,7 @@ namespace ConsoleCards.Presentation.Composition
         internal RulesCardModel PlayerGameRulesCardModel()
         {
             List<RulesCardLine> lines = new List<RulesCardLine>();
+            AddRulesSheetLines(lines); // RULES-SHEET (R1): the sheet's sections first
             int number = 0;
             string[] written = (activePlayerGame.rulesText ?? string.Empty).Split('\n');
             for (int i = 0; i < written.Length; i++)
@@ -978,6 +1001,21 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             return new RulesCardModel(activePlayerGame.name, false, lines);
+        }
+
+        // RULES-SHEET (R1): the game's rules sheet as rule lines (built as a rule set, read, and let go: the card keeps
+        // only the words). Nothing when the sheet is empty, as in games saved before it.
+        private void AddRulesSheetLines(List<RulesCardLine> lines)
+        {
+            PlayerGameFile game = activePlayerGame;
+            if (game == null || !RulesSheet.HasContent(game.sheet, game.sheetText)) return;
+            List<string> basics = new List<string>(2) { PlayersText(game.minimumPlayers, game.maximumPlayers) + "." };
+            if (game.minutes > 0) basics.Add($"About {game.minutes} minutes.");
+            RuleSetDefinition set = RulesSheet.Build("sheet:" + game.id, game.name, game.id, basics, game.sheet, game.sheetText);
+            if (set == null) return;
+            RulesCardModel sheet = RulesCardModel.FromRuleSet(set, null);
+            UnityEngine.Object.Destroy(set);
+            if (sheet != null) lines.AddRange(sheet.Lines);
         }
 
         internal GameSelectModel PlayerGameSelectModel(GameSelectEntry entry, List<CardEditorRowModel> rows, string status)

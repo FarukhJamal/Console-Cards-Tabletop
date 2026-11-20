@@ -67,6 +67,7 @@ namespace ConsoleCards.Presentation.Composition
         internal void FillBoardParts(GameSaveModel model, SavedTable table, DeckChoice deck, bool deckOnTable)
         {
             model.Minutes = saveMinutes;
+            model.SheetPreview = SheetPreviewLines(); // RULES-SHEET (R2)
             bool hasDeck = deck.Game != null;
             int deckCards = hasDeck ? SaveDeckCards(deck, out _, out _).Count : 0;
             model.StepsDone = new[]
@@ -74,6 +75,7 @@ namespace ConsoleCards.Presentation.Composition
                 hasDeck ? deckOnTable : table.Count > 0, // Deck: the game's deck is on the table (or it needs none)
                 hasDeck && deckCards > 0, // Cards: its deck has cards
                 saveDeal != null, // Deal: it deals
+                RulesSheet.HasContent(saveSheet, saveSheetText), // Rules: its rules sheet has something in it
                 false,
             };
 

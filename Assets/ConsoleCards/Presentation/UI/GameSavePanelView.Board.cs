@@ -39,7 +39,7 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Color stepIdleColor = new Color(0.608f, 0.643f, 0.655f, 1f);
         [SerializeField] private GameObject warningBox;
 
-        private static readonly string[] BoardStepNames = { "DECK", "CARDS", "DEAL", "SAVE" };
+        private static readonly string[] BoardStepNames = { "DECK", "CARDS", "DEAL", "RULES", "SAVE" };
 
         private readonly List<SaveRuleRow> ruleRowPool = new List<SaveRuleRow>();
         private readonly List<string> rules = new List<string>();
@@ -47,12 +47,15 @@ namespace ConsoleCards.Presentation.UI
         private readonly List<GameObject> savedPool = new List<GameObject>();
         private readonly StringBuilder rulesText = new StringBuilder(512);
         private string gameName = string.Empty;
+        private IReadOnlyList<string> sheetPreview = System.Array.Empty<string>();
+        private readonly List<string> previewLines = new List<string>();
 
         private bool HasRuleList => ruleRows != null && ruleRowTemplate != null && newRuleInput != null;
 
         private void BindBoard(GameSaveModel model)
         {
             gameName = model.Name ?? string.Empty;
+            sheetPreview = model.SheetPreview ?? System.Array.Empty<string>();
             if (minutesButton != null && minutesLabel != null)
             {
                 minutesLabel.text = $"{model.Minutes} min";
@@ -196,10 +199,13 @@ namespace ConsoleCards.Presentation.UI
             }
 
             previewRowTemplate.SetActive(false);
-            List<string> lines = rules;
-            if (!HasRuleList)
+            // RULES-SHEET (R2): the rules sheet's sections first, then the written rules, as the rules card shows them.
+            List<string> lines = previewLines;
+            lines.Clear();
+            for (int i = 0; i < sheetPreview.Count; i++) lines.Add(sheetPreview[i]);
+            if (HasRuleList) lines.AddRange(rules);
+            else
             {
-                lines = new List<string>();
                 foreach (string line in (rulesInput.text ?? string.Empty).Replace("\r", string.Empty).Split('\n'))
                 {
                     if (line.Trim().Length > 0) lines.Add(line.Trim());

@@ -54,6 +54,7 @@ namespace ConsoleCards.Presentation.UI
         private FrontEndView frontEndView; // UI-2: the front end shows the New table… choices as the user journey
         private bool frontEndMissing;
         private GameSavePanelView gameSavePanelView;
+        private RulesSheetPanelView rulesSheetPanelView; // RULES-SHEET (R2)
         private bool saveGameEntryWarned;
         private bool deckEditorEntryWarned;
         private bool profileEntryWarned;
@@ -426,7 +427,8 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>True when the front end shows only its background and nothing has opened over it.</summary>
         public bool IsFrontEndBackdropAlone => frontEndBackdrop && IsVisible(frontEndView)
             && !IsVisible(contentArtPanelView) && !IsVisible(cardEditorPanelView) && !IsVisible(deckEditorPanelView)
-            && !IsVisible(profilePanelView) && !IsVisible(personaPanelView) && !IsVisible(gameSavePanelView);
+            && !IsVisible(profilePanelView) && !IsVisible(personaPanelView) && !IsVisible(gameSavePanelView)
+            && !IsVisible(rulesSheetPanelView);
 
         private bool ShowFrontEnd(GameSelectModel model, GameSelectActions actions)
         {
@@ -510,6 +512,40 @@ namespace ConsoleCards.Presentation.UI
         public void CloseGameSave()
         {
             ReleaseView(gameSavePanelView);
+            SetModalLayerOffUnlessHandover();
+        }
+
+        /// <summary>RULES-SHEET (R2): shows or refreshes the Rules sheet panel. False when its prefab is missing.</summary>
+        public bool ShowRulesSheet(RulesSheetModel model, RulesSheetActions actions)
+        {
+            try
+            {
+                EnsureService();
+                if (rulesSheetPanelView == null || !rulesSheetPanelView.IsAcquired)
+                {
+                    ReleaseView(tabletopPopupView);
+                    popupLayer.SetActive(false);
+                    ReleaseModalViews();
+                    componentToolboxView?.CloseToolbox();
+                    rulesSheetPanelView = uiService.AcquireCached<RulesSheetPanelView>(UiPrefabIds.RulesSheetPanel);
+                }
+
+                modalLayer.SetActive(true);
+                rulesSheetPanelView.Bind(model, actions);
+                rulesSheetPanelView.Show();
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                Debug.LogWarning(
+                    "The Rules sheet panel is missing: run Console Cards > UI > Create Missing Table HUD (HUD-B). " + exception.Message);
+                return false;
+            }
+        }
+
+        public void CloseRulesSheet()
+        {
+            ReleaseView(rulesSheetPanelView);
             SetModalLayerOffUnlessHandover();
         }
 
@@ -1134,7 +1170,7 @@ namespace ConsoleCards.Presentation.UI
                 && !IsVisible(ruleProposalPanelView) && !IsVisible(profilePanelView) && !IsVisible(personaPanelView)
                 && !IsVisible(cardEditorPanelView)
                 && !IsVisible(deckEditorPanelView) && !IsVisible(gameSelectPanelView) && !IsVisible(frontEndView)
-                && !IsVisible(gameSavePanelView) && !IsVisible(tablePanelView) && !IsVisible(rulebookView)
+                && !IsVisible(gameSavePanelView) && !IsVisible(rulesSheetPanelView) && !IsVisible(tablePanelView) && !IsVisible(rulebookView)
                 && !IsVisible(pauseMenuView) && !IsVisible(tableSettingsView))
             {
                 modalLayer.SetActive(false);
@@ -1588,6 +1624,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(gameSelectPanelView);
             ReleaseView(frontEndView);
             ReleaseView(gameSavePanelView);
+            ReleaseView(rulesSheetPanelView);
             ReleaseView(tablePanelView);
             ReleaseView(hintStripView);
             ReleaseView(toolBarView);
@@ -2002,6 +2039,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(gameSelectPanelView);
             if (!frontEndBackdrop) ReleaseView(frontEndView);
             ReleaseView(gameSavePanelView);
+            ReleaseView(rulesSheetPanelView);
             ReleaseView(quantityPopupView);
             ReleaseView(cardInspectPopupView);
             ReleaseView(actionAbilityPurchasePopupView);

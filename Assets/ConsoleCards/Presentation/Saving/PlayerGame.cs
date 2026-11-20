@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using ConsoleCards.Definitions;
 using UnityEngine;
 
 namespace ConsoleCards.Presentation.Saving
@@ -50,11 +51,21 @@ namespace ConsoleCards.Presentation.Saving
         /// <summary>About how long a game takes, in minutes (Make a game › ABOUT); 0: not said.</summary>
         public int minutes;
 
+        /// <summary>
+        /// RULES-SHEET (R1): the rules sheet's filled-in fields (see <see cref="RulesSheet"/>; a field not here, or
+        /// empty, means players decide) and each section's written rules. Older saves have none.
+        /// </summary>
+        public List<SheetValue> sheet = new List<SheetValue>();
+
+        public List<SheetText> sheetText = new List<SheetText>();
+
         public PlayerGameFile Normalised()
         {
             if (table == null) table = new SavedTable();
             if (deck == null) deck = new SavedGameDeck();
             if (deck.pose == null) deck.pose = new SavedPose();
+            if (sheet == null) sheet = new List<SheetValue>();
+            if (sheetText == null) sheetText = new List<SheetText>();
             table.Normalised();
             minimumPlayers = Mathf.Clamp(minimumPlayers, 1, MaximumPlayers);
             maximumPlayers = Mathf.Clamp(maximumPlayers, minimumPlayers, MaximumPlayers);
