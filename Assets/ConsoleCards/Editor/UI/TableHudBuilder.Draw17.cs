@@ -25,8 +25,9 @@ namespace ConsoleCards.Editor.UI
 
         private static void BuildDrawBar17(RectTransform root, SerializedObject so)
         {
-            // The rail's fifth button (Draw): its centre is 14 + 8/1.5 + 4 x 60/1.5 + 18 board px down.
-            float centre = (14f * K) + 8f + (4f * 60f) + 27f;
+            // The rail's fifth button (Draw): its centre is 14 + 8/1.5 + 4 x 60/1.5 + 18 board px down, below the
+            // rail's TOOLS header (designer note 05) and its gap.
+            float centre = (14f * K) + 8f + RailHeaderHeight + 6f + (4f * 60f) + 27f;
             float barHeight = 50f * K;
             float right = -((14f * K) + 72f + 12f);
             RectTransform holder = Rect("Draw", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,

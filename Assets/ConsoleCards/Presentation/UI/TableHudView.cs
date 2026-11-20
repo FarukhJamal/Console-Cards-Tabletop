@@ -91,6 +91,12 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button handStyleButton;
         [Tooltip("Board 17 (optional): the Draw tool's bar beside the rail; without it Draw uses the tool bar's panel.")]
         [SerializeField] private TableDrawBarView drawBar;
+        [Tooltip("Designer note 05 (optional): the rail's TOOLS header; a press hides or shows the rail's buttons.")]
+        [SerializeField] private Button railToggle;
+        [Tooltip("Designer note 05 (optional): the header's mark, - while the buttons show and + while they are hidden.")]
+        [SerializeField] private Text railToggleMark;
+        [Tooltip("Designer note 05 (optional): everything on the rail under its header.")]
+        [SerializeField] private GameObject railBody;
 
         [Header("Bottom left")]
         [SerializeField] private Button rulebookButton;
@@ -204,6 +210,12 @@ namespace ConsoleCards.Presentation.UI
 
             if (toolEnabled.Length != tools.Length) toolEnabled = new bool[tools.Length];
             for (int i = 0; i < toolEnabled.Length; i++) toolEnabled[i] = true;
+
+            if (railToggle != null && railBody != null)
+            {
+                railToggle.onClick.AddListener(ToggleRail);
+                ShowRail(!RailHiddenPreference());
+            }
 
             hintGotIt.onClick.AddListener(PressGotIt);
             hintClose.onClick.AddListener(PressLater);
@@ -488,6 +500,58 @@ namespace ConsoleCards.Presentation.UI
         }
 
         // ---------- rail ----------
+
+        // Designer note 05 (2026-11-17): the rail's buttons hide under its TOOLS header and come back; the choice is
+        // kept for the next table on this computer. Their keys keep working while they are hidden.
+        private const string RailHiddenKey = "ConsoleCards.Hud.ToolsHidden";
+
+        public bool IsRailOpen => railBody == null || railBody.activeSelf;
+
+        private void ToggleRail()
+        {
+            bool open = !IsRailOpen;
+            ShowRail(open);
+            try
+            {
+                PlayerPrefs.SetInt(RailHiddenKey, open ? 0 : 1);
+            }
+            catch (Exception)
+            {
+                // The choice is only for this session then.
+            }
+
+            if (!open && IsToolActive(TableToolKind.Draw)) actions?.ChooseTool?.Invoke(TableToolKind.Grab); // its bar sits beside the hidden button
+        }
+
+        private void ShowRail(bool open)
+        {
+            if (railBody == null) return;
+            if (railBody.activeSelf != open) railBody.SetActive(open);
+            if (railToggleMark != null) railToggleMark.text = open ? "-" : "+";
+        }
+
+        private static bool RailHiddenPreference()
+        {
+            try
+            {
+                return PlayerPrefs.GetInt(RailHiddenKey, 0) == 1;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        private bool IsToolActive(TableToolKind kind)
+        {
+            for (int i = 0; i < tools.Length; i++)
+            {
+                RailTool tool = tools[i];
+                if (tool != null && tool.kind == kind) return tool.fill != null && tool.fill.color == railActiveFill;
+            }
+
+            return false;
+        }
 
         public void SetActiveTool(TableToolKind kind)
         {
@@ -947,7 +1011,7 @@ namespace ConsoleCards.Presentation.UI
             Button[] buttons =
             {
                 logoButton, menuButton, settingsButton, undoButton, redoButton, rulebookButton, toolboxButton,
-                logButton, helpButton, shopButton, hintGotIt, hintClose, primaryButton, handStyleButton, hintNext,
+                logButton, helpButton, shopButton, hintGotIt, hintClose, primaryButton, handStyleButton, hintNext, railToggle,
             };
             for (int i = 0; i < buttons.Length; i++)
             {

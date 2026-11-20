@@ -26,7 +26,7 @@ namespace ConsoleCards.Editor.UI
     /// </summary>
     public static partial class TableHudBuilder
     {
-        private const string HudLabel = "HudBoard7B8"; // B8: the CC logo picture (owner, 2026-10-30) // B7: Draw is I, the player chip is a rounded box like the hint // B5: board 17's Draw on the rail and its bar
+        private const string HudLabel = "HudBoard7B9"; // B9: the rail has a TOOLS header that hides and shows its buttons (designer note 05, 2026-11-17) // B8: the CC logo picture (owner, 2026-10-30) // B7: Draw is I, the player chip is a rounded box like the hint // B5: board 17's Draw on the rail and its bar
         private const string HudArt = "Assets/ConsoleCards/Content/UI/Board/Hud/";
         private const float K = 1.5f; // board pixels to the 1920 x 1080 canvas
 
@@ -212,20 +212,26 @@ namespace ConsoleCards.Editor.UI
             VerticalLayoutGroup railColumn = Column(rail.gameObject, 8, 8, 8, 8, 6f, TextAnchor.UpperCenter);
             railColumn.childForceExpandWidth = false;
             Fit(rail.gameObject, true, true);
+            // Designer note 05 (2026-11-17): a TOOLS header on top; pressing it hides the buttons under it (the rail
+            // shrinks to the header) and shows them again.
+            Button railToggle = RailHeader(rail, out Text railToggleMark);
+            RectTransform railBody = Child("Body", rail);
+            VerticalLayoutGroup bodyColumn = Column(railBody.gameObject, 0, 0, 0, 0, 6f, TextAnchor.UpperCenter);
+            bodyColumn.childForceExpandWidth = false;
             TableHudView.RailTool[] tools =
             {
-                Rail7Tool(rail, TableToolKind.Grab, "HudSelect", "V", "Select and move · V"),
-                Rail7Tool(rail, TableToolKind.Pan, "HudPan", "+", "Move the camera · Space drag"),
-                Rail7Tool(rail, TableToolKind.Ping, "HudPing", "P", "Ping · P"),
-                Rail7Tool(rail, TableToolKind.Measure, "HudMeasure", "M", "Measure · M"),
-                Rail7Tool(rail, TableToolKind.Draw, "HudDraw", "I", "Draw · I"), // board 17: under Measure
+                Rail7Tool(railBody, TableToolKind.Grab, "HudSelect", "V", "Select and move · V"),
+                Rail7Tool(railBody, TableToolKind.Pan, "HudPan", "+", "Move the camera · Space drag"),
+                Rail7Tool(railBody, TableToolKind.Ping, "HudPing", "P", "Ping · P"),
+                Rail7Tool(railBody, TableToolKind.Measure, "HudMeasure", "M", "Measure · M"),
+                Rail7Tool(railBody, TableToolKind.Draw, "HudDraw", "I", "Draw · I"), // board 17: under Measure
             };
-            Rail7Rule(rail, "Rule1");
-            Button undo = Rail7Button(rail, "Undo", "HudUndo", "<", "Undo · Ctrl Z", out Image undoIcon, out _);
-            Button redo = Rail7Button(rail, "Redo", "HudRedo", ">", "Redo · Ctrl Y", out Image redoIcon, out _);
-            Button shop = Rail7Button(rail, "Shop", null, "$", "Shop", out _, out _);
-            Rail7Rule(rail, "Rule2");
-            Button menu = Rail7Button(rail, "Menu", "HudMenu", "=", "Game menu · Esc", out _, out _);
+            Rail7Rule(railBody, "Rule1");
+            Button undo = Rail7Button(railBody, "Undo", "HudUndo", "<", "Undo · Ctrl Z", out Image undoIcon, out _);
+            Button redo = Rail7Button(railBody, "Redo", "HudRedo", ">", "Redo · Ctrl Y", out Image redoIcon, out _);
+            Button shop = Rail7Button(railBody, "Shop", null, "$", "Shop", out _, out _);
+            Rail7Rule(railBody, "Rule2");
+            Button menu = Rail7Button(railBody, "Menu", "HudMenu", "=", "Game menu · Esc", out _, out _);
 
             // Not on board 7B (in the game menu, or a key): kept for the view, hidden.
             RectTransform hidden = Rect("NotOnBoard", root, Vector2.zero, Vector2.zero, Vector2.zero, Vector2.zero,
@@ -313,6 +319,9 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("helpButton").objectReferenceValue = help;
             so.FindProperty("settingsButton").objectReferenceValue = settings;
             so.FindProperty("menuButton").objectReferenceValue = menu;
+            so.FindProperty("railToggle").objectReferenceValue = railToggle;
+            so.FindProperty("railToggleMark").objectReferenceValue = railToggleMark;
+            so.FindProperty("railBody").objectReferenceValue = railBody.gameObject;
             so.FindProperty("handStyleButton").objectReferenceValue = handStyle;
             so.FindProperty("rulebookButton").objectReferenceValue = rulebook;
             so.FindProperty("toolboxButton").objectReferenceValue = toolbox;
@@ -434,6 +443,41 @@ namespace ConsoleCards.Editor.UI
             }
 
             Tip(rect, tip, true);
+            return button;
+        }
+
+        // Designer note 05: the rail's header, TOOLS over a small mark (- open, + closed), 54 wide and RailHeaderHeight
+        // tall; the whole header is the button. Its hover is the rail buttons' (dark teal, cyan edge).
+        internal const float RailHeaderHeight = 40f;
+
+        private static Button RailHeader(RectTransform rail, out Text mark)
+        {
+            RectTransform rect = Child("Header", rail);
+            Size(rect.gameObject, 54f, RailHeaderHeight, 54f);
+            RectTransform hoverRect = Rect("Hover", rect, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+                Vector2.zero);
+            Image hover = Shape7(hoverRect, HoverFill, round);
+            hover.raycastTarget = true;
+            Outline hoverEdge = hoverRect.gameObject.AddComponent<Outline>();
+            hoverEdge.effectColor = HoverEdge;
+            hoverEdge.effectDistance = new Vector2(1.5f, -1.5f);
+            hoverEdge.useGraphicAlpha = true;
+            Button button = rect.gameObject.AddComponent<Button>();
+            button.targetGraphic = hover;
+            ColorBlock colours = button.colors;
+            colours.normalColor = new Color(1f, 1f, 1f, 0f);
+            colours.highlightedColor = Color.white;
+            colours.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
+            colours.selectedColor = new Color(1f, 1f, 1f, 0f);
+            colours.disabledColor = new Color(1f, 1f, 1f, 0f);
+            button.colors = colours;
+            RectTransform word = Rect("Label", rect, new Vector2(0f, 0.45f), Vector2.one, new Vector2(0.5f, 0.5f),
+                Vector2.zero, Vector2.zero);
+            Label(word, bold, 12, Soft, TextAnchor.MiddleCenter, "TOOLS");
+            RectTransform markRect = Rect("Mark", rect, Vector2.zero, new Vector2(1f, 0.5f), new Vector2(0.5f, 0.5f),
+                Vector2.zero, Vector2.zero);
+            mark = Label(markRect, bold, 18, Cyan, TextAnchor.MiddleCenter, "-");
+            Tip(rect, "Hide or show the tools", true);
             return button;
         }
 
