@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Safe Search
   category: Ability
   description: 'Action. Pick 1 adjacent floor tile and flip it. A Trap there does not affect you. A Key or floor Ability there cannot be claimed this turn: move onto it on a later turn.'
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: c17a14c7250e1ec4999b015189bdab6b, type: 3}
+  frontArtworkReference: trap-floor/test-ai/safe-search.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 1

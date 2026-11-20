@@ -16,7 +16,7 @@ MonoBehaviour:
   displayName: Dodge
   category: Ability
   description: 'Reaction. When a Trap triggers, move to any adjacent floor tile instead. No diagonal moves.'
-  frontArtwork: {fileID: 2800000, guid: 08bbad5f0c634cc99c9f37e6a3d6c7d2, type: 3}
+  frontArtwork: {fileID: 2800000, guid: f55996843676a7640b94423d08ae9673, type: 3}
   frontArtworkReference: trap-floor/fronts/dodge.png
   backArtwork: {fileID: 0}
   backArtworkReference: 

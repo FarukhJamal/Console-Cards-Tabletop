@@ -16,7 +16,7 @@ MonoBehaviour:
   displayName: Shield
   category: Ability
   description: 'Reaction. Stop a triggered Trap.'
-  frontArtwork: {fileID: 2800000, guid: 3812437a88db493ba61607f66fcc2d07, type: 3}
+  frontArtwork: {fileID: 2800000, guid: 823a7288d4a9fec438d36643553afa8b, type: 3}
   frontArtworkReference: trap-floor/fronts/shield.png
   backArtwork: {fileID: 0}
   backArtworkReference: 

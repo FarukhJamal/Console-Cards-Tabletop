@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Spring Trap Down
   category: Trap
   description: 'Launches you 1 tile down. Off the grid or onto a hole, you are out for this floor. Onto a face-down tile, that tile flips too.'
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: bec4e8dad30d2674080c518d412d3a3d, type: 3}
+  frontArtworkReference: trap-floor/test-ai/spring-down.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 1

@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Lasso
   category: Ability
   description: 'Reaction. If you have used no other Ability this turn: when your teammate triggers a Trap, pull them to your tile. Team Play only.'
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: 0dbe1ad081be5cc49bf8ffe741136edb, type: 3}
+  frontArtworkReference: trap-floor/test-ai/lasso.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 1

@@ -16,7 +16,7 @@ MonoBehaviour:
   displayName: Run
   category: Ability
   description: 'Action. Instead of moving, move 3 tiles in a straight line (up, down, left or right), never over a hole.'
-  frontArtwork: {fileID: 2800000, guid: 827041e1c7734303936e8f1b3ae15df5, type: 3}
+  frontArtwork: {fileID: 2800000, guid: c31afbf6bffd4d64db2993896c96086d, type: 3}
   frontArtworkReference: trap-floor/fronts/rush.png
   backArtwork: {fileID: 0}
   backArtworkReference: 

@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Crane Trap
   category: Trap
   description: 'Roll 2d6 and move to that tile (first die column, second die row). Onto a hole, you are out for this floor. Onto a face-down tile, that tile flips too.'
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: 1019b36de7fefbc41b24914db5d73c57, type: 3}
+  frontArtworkReference: trap-floor/test-ai/crane-trap.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 2

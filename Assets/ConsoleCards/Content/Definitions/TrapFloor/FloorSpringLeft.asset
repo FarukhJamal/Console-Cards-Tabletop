@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Spring Trap Left
   category: Trap
   description: 'Launches you 1 tile left. Off the grid or onto a hole, you are out for this floor. Onto a face-down tile, that tile flips too.'
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: 531d28f11d8c01a4197541f65b51542a, type: 3}
+  frontArtworkReference: trap-floor/test-ai/spring-left.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 1

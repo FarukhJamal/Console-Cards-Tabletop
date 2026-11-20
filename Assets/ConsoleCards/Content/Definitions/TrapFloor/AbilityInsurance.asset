@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Insurance
   category: Ability
   description: 'Reaction. When you land on a collapsed tile, discard this card instead of being eliminated. Team Play only.'
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: 6930584db8a92d748a21bd55b788a9a7, type: 3}
+  frontArtworkReference: trap-floor/test-ai/insurance.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 1
