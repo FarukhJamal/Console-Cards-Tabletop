@@ -345,6 +345,15 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void NewEditorCard(CardEditorTyped typed)
         {
+            // RULES-SHEET (R3): client limit, the cards one player may make in all games together.
+            HashSet<string> made = host.PlayerGamesPanel.MadeCardIds(out bool counted);
+            if (counted && made.Count >= PlayerGamesPresenter.MaximumMadeCards)
+            {
+                ShowCardEditor($"You have made {made.Count} cards, the most a player can have ({PlayerGamesPresenter.MaximumMadeCards}). "
+                    + "Delete one to make a new card.");
+                return;
+            }
+
             DropUnsavedNewCard();
             editorAutoSaved = false;
             CardDefinition model = editorDraft != null ? FindEditorGameCard(editorDraft.WorksLikeId) : null;

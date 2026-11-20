@@ -225,6 +225,13 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            string refused = SaveCheck(table, deck); // RULES-SHEET (R3): client rules and the sheet's fit with the table
+            if (refused != null)
+            {
+                ShowGameSave(refused);
+                return;
+            }
+
             SavedGameDeck gameDeck = new SavedGameDeck();
             if (deckOnTable && host.matchState.TryGetContainerPlacement(gameDeckContainerId, out ContainerPlacementState deckPlacement))
             {
