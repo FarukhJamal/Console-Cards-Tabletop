@@ -1122,6 +1122,7 @@ namespace ConsoleCards.Presentation.Composition
             ActiveCartridge.TickFeedback(); // CART-1b: the game's banners, messages and board markers
             UpdateGestures(); // UX-1: dice shake and the cursor
             TickPersonas(); // PERSONA-1: each seat's Persona at its table edge
+            TickRemoteHands(); // HANDS-1: the other players' hands at an online table
         }
 
         // The tray band is a drop target only while a card drag is in progress.

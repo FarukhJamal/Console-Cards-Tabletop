@@ -26,6 +26,8 @@ namespace ConsoleCards.Presentation.Composition
         private const byte LiveMeasure = 4; // owner, 2026-11-03: the Measure tool is seen by everyone too
         private const byte LiveHeldCard = 5; // LIVE-HELD (owner, 2026-11-18): a card held out of a deck, hand or Console
         private const byte LiveChat = 6; // CHAT-1 (designer note 03, 2026-11-17): a player's chat message
+        private const byte LiveHand = 7; // HANDS-1 (designer note 01, 2026-11-17): where a player's pointer is on the table
+        private const float HandKeepSeconds = 2f; // a still pointer is said again this often (the others drop it after 6 s)
         private const int MaxLivePoints = 256; // per message; a longer line goes in several
         private readonly Vector3[] livePoints = new Vector3[MaxLivePoints];
 
@@ -57,8 +59,46 @@ namespace ConsoleCards.Presentation.Composition
             SendLive();
         }
 
+        // HANDS-1: this computer's pointer on the table, at the pose rate while it moves (and every few seconds while it
+        // is still), and once when it leaves the table. Nothing goes while it stays off the table.
+        private bool handSent;
+        private bool handSentHolding;
+        private Vector3 handSentPoint;
+        private float handSentAt;
+
+        private void SendHand()
+        {
+            if (!CanSendLive()) return;
+            bool visible = host.TryGetLocalHand(out Vector3 point, out bool holding);
+            float now = Time.unscaledTime;
+            if (!visible)
+            {
+                if (!handSent) return;
+                handSent = false;
+            }
+            else
+            {
+                bool changed = !handSent
+                    || holding != handSentHolding
+                    || (point - handSentPoint).sqrMagnitude > 0.0004f;
+                if (!changed && now - handSentAt < HandKeepSeconds) return;
+                handSent = true;
+                handSentHolding = holding;
+                handSentPoint = point;
+            }
+
+            handSentAt = now;
+            BeginMessage(MsgLive);
+            writer.Write(LiveHand);
+            WriteGuid(host.LocalPlayerId.Value);
+            writer.Write(visible);
+            writer.Write(holding);
+            WriteVector(point);
+            SendLive();
+        }
+
         // CHAT-1, as LIVE-HELD: the host shows and passes on a message only from the player it names (the sender's own
-        // seat, never the message's word), so no one can write as someone else.
+        // seat, never the message's word), so no one can write as someone else. HANDS-1: the same for a pointer.
         private static bool HostAllowsChat(Member from, byte[] data)
         {
             if (from == null || from.Player == Guid.Empty) return false;
@@ -242,7 +282,7 @@ namespace ConsoleCards.Presentation.Composition
         private void HostLive(Member from, byte[] data)
         {
             if (data.Length > 1 && data[1] == LiveHeldCard && !HostAllowsHeldCard(from, data)) return; // LIVE-HELD
-            if (data.Length > 1 && data[1] == LiveChat && !HostAllowsChat(from, data)) return; // CHAT-1
+            if (data.Length > 1 && (data[1] == LiveChat || data[1] == LiveHand) && !HostAllowsChat(from, data)) return; // CHAT-1, HANDS-1
             ApplyLive(data);
             for (int i = 0; i < members.Count; i++)
             {
@@ -303,6 +343,14 @@ namespace ConsoleCards.Presentation.Composition
                     case LiveChat: // CHAT-1
                         host.ShowRemoteChat(player, reader.ReadString());
                         break;
+                    case LiveHand: // HANDS-1
+                        {
+                            bool visible = reader.ReadBoolean();
+                            bool holding = reader.ReadBoolean();
+                            host.ShowRemoteHand(player, ReadVector(reader), visible, holding);
+                            break;
+                        }
+
                     case LiveHeldCard:
                         {
                             TabletopObjectId card = new TabletopObjectId(ReadGuid(reader));
