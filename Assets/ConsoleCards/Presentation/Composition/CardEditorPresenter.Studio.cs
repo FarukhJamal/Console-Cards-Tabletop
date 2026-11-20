@@ -67,6 +67,17 @@ namespace ConsoleCards.Presentation.Composition
                 : "Standard: the card plays at the normal card size.");
         }
 
+        // Owner, 2026-11-21: the picture is the whole card face (nothing drawn over it) or sits in the game's frame.
+        internal void SetEditorWholeCard(bool whole, CardEditorTyped typed)
+        {
+            if (editorDraft == null) return;
+            ApplyTyped(typed);
+            editorDraft.WholeCard = whole;
+            ShowCardEditor(whole
+                ? "The picture is the whole card: its own frame, name, cost and rules show; the game draws nothing over it."
+                : "The picture sits in the game's frame, with its tabs and icons.");
+        }
+
         // Crop to fill or fit with a border. The player's own pictures are shaped again from the picture as chosen.
         internal void SetEditorFit(bool fit, CardEditorTyped typed)
         {
@@ -135,6 +146,7 @@ namespace ConsoleCards.Presentation.Composition
                 Frame = from.Frame,
                 Large = from.Large,
                 FitPicture = from.FitPicture,
+                WholeCard = from.WholeCard,
             };
             CopyIcons(from.Icons, copy.Icons);
             copy.FrontKey = CopyPicture(from.FrontKey, copy.Id, true);

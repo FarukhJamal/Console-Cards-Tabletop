@@ -63,8 +63,10 @@ namespace ConsoleCards.Presentation.Composition
             Transform existing = faceRoot.Find(CardIconsObjectName);
             CardFrameStyle style = definition != null ? CardFrameStyleOf(definitionId) : null;
             CardFrameVariant variant = style != null ? style.Variant(definition.FrameVariant) : null;
-            bool framed = variant != null && variant.ShowFrame;
-            string icons = definition != null ? definition.EdgeSymbolsText : string.Empty;
+            // Owner, 2026-11-21: a whole-card picture has its own frame, name and rules: nothing is drawn over it.
+            bool wholeCard = definition != null && definition.WholeCard;
+            bool framed = !wholeCard && variant != null && variant.ShowFrame;
+            string icons = definition != null && !wholeCard ? definition.EdgeSymbolsText : string.Empty;
             Material[] materials = definition != null && (framed || icons.Length > 0)
                 ? CardFaceMaterials(references.FaceUpRenderer, style, variant, framed)
                 : null;

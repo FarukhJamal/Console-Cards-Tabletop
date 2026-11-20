@@ -69,7 +69,7 @@ namespace ConsoleCards.Editor.UI
                 UiLayer.Modal, UiRetention.CachedSingleInstance);
         }
 
-        private const string EditorsLabel = "BoardEditors7";
+        private const string EditorsLabel = "BoardEditors8"; // 8: THE PICTURE IS: the whole card / in the game frame (2026-11-21)
 
         // A prefab this builder made before its current version (no label) is made again once; one with the label is
         // kept (it may have been edited).
@@ -221,14 +221,18 @@ namespace ConsoleCards.Editor.UI
             Text bestSize = InfoRow(sizeBox, 1, "Best size", "1500 × 2100 px");
             Text sharpSize = InfoRow(sizeBox, 2, "Smallest sharp size", "750 × 1050 px");
             Button template = Btn(sizeBox, "Template", 10, 80, 342, 34, "GET THE TEMPLATE PNG", 12);
-            Txt(pictures, "ShapeTitle", 0, 198, 362, 18, bold, 11, Muted, TextAnchor.MiddleLeft, "WHEN A PICTURE IS THE WRONG SHAPE");
-            Segments10(pictures, "Fit", 0, 220, 362, 34, new[] { "CROP TO FILL", "FIT · ADD BORDER" }, out Button[] fitButtons,
+            // Owner, 2026-11-21: a picture can be the whole card (scanned from a bought game), with nothing drawn over it.
+            Txt(pictures, "FaceTitle", 0, 196, 362, 18, bold, 11, Muted, TextAnchor.MiddleLeft, "THE PICTURE IS");
+            Segments10(pictures, "Face", 0, 216, 362, 32, new[] { "THE WHOLE CARD", "IN THE GAME FRAME" }, out Button[] faceButtons,
+                out Image[] faceFills);
+            Txt(pictures, "ShapeTitle", 0, 256, 362, 18, bold, 11, Muted, TextAnchor.MiddleLeft, "WHEN A PICTURE IS THE WRONG SHAPE");
+            Segments10(pictures, "Fit", 0, 276, 362, 32, new[] { "CROP TO FILL", "FIT · ADD BORDER" }, out Button[] fitButtons,
                 out Image[] fitFills);
-            Text never = Txt(pictures, "Never", 0, 262, 362, 36, medium, 12, Muted, TextAnchor.UpperLeft,
+            Text never = Txt(pictures, "Never", 0, 314, 362, 36, medium, 12, Muted, TextAnchor.UpperLeft,
                 "Pictures are never stretched: one of another shape is cropped to fill the card.");
             never.horizontalOverflow = HorizontalWrapMode.Wrap;
-            RectTransform warning = Box10(pictures, "Warning", 0, 304, 362, 76, EdWarnFill, EdWarnEdge);
-            Text warningWords = Txt(warning, "Label", 12, 8, 338, 60, medium, 12, EdWarnWords, TextAnchor.UpperLeft,
+            RectTransform warning = Box10(pictures, "Warning", 0, 354, 362, 56, EdWarnFill, EdWarnEdge);
+            Text warningWords = Txt(warning, "Label", 12, 6, 338, 44, medium, 12, EdWarnWords, TextAnchor.UpperLeft,
                 "This picture is not the card's shape.");
             warningWords.horizontalOverflow = HorizontalWrapMode.Wrap;
             warning.gameObject.SetActive(false);
@@ -341,7 +345,9 @@ namespace ConsoleCards.Editor.UI
             AssignArray(so.FindProperty("sizeButtons"), sizeButtons);
             AssignArray(so.FindProperty("sizeFills"), sizeFills);
             AssignArray(so.FindProperty("fitButtons"), fitButtons);
+            AssignArray(so.FindProperty("faceButtons"), faceButtons);
             AssignArray(so.FindProperty("fitFills"), fitFills);
+            AssignArray(so.FindProperty("faceFills"), faceFills);
             so.FindProperty("bestSizeLabel").objectReferenceValue = bestSize;
             so.FindProperty("sharpSizeLabel").objectReferenceValue = sharpSize;
             so.FindProperty("fitNoteLabel").objectReferenceValue = never;

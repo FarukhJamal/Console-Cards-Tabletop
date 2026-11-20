@@ -14,8 +14,8 @@ namespace ConsoleCards.Presentation.Composition
     /// <summary>
     /// RULES-SHEET (R3; "Console Cards — Game Rules and Templates", Save): Make a game refuses to save, with a message
     /// saying what to change, a game that breaks a client rule or whose rules sheet cannot work with its table:
-    /// more than <see cref="MaximumMadeCards"/> cards made by the player; no Console Cards part (the console, a mapper
-    /// or a Console Cards deck); dealing more cards than the deck has; a sheet asking for pieces the table lacks.
+    /// more than <see cref="MaximumMadeCards"/> cards made by the player; no Console Cards part (the console mat, a
+    /// mapping mat or a controller deck); dealing more cards than the deck has; a sheet asking for pieces the table lacks.
     /// The content check on uploaded cards (no sexual content) is the owner's open question 6 and is not done here.
     /// </summary>
     internal sealed partial class PlayerGamesPresenter
@@ -35,7 +35,7 @@ namespace ConsoleCards.Presentation.Composition
             List<ObjectDefinitionId> deckCards = deck.Game != null ? SaveDeckCards(deck, out _, out _) : new List<ObjectDefinitionId>();
             if (!UsesConsoleCardsPart(table, deckCards, made))
             {
-                return "Use at least one Console Cards part: the console, a mapper or a Console Cards deck (Toolbox).";
+                return "Use at least one Console Cards part: the console mat, a mapping mat or a controller deck.";
             }
 
             int players = Mathf.Max(saveMinimumPlayers, saveMaximumPlayers);
@@ -81,13 +81,15 @@ namespace ConsoleCards.Presentation.Composition
             return null;
         }
 
-        // A console or a mapper on the table, or any card that is not one the player made (a Console Cards deck's card).
-        private static bool UsesConsoleCardsPart(SavedTable table, List<ObjectDefinitionId> deckCards, HashSet<string> made)
+        // Owner, 2026-11-21: the Console Cards parts are the console mat (a console), a mapping mat (a board) and the
+        // controller decks (their cards). A game box's cards (Trap Floor's) are the game's, not a part, and do not count.
+        private bool UsesConsoleCardsPart(SavedTable table, List<ObjectDefinitionId> deckCards, HashSet<string> made)
         {
             if (table.consoles.Count > 0 || table.boards.Count > 0) return true;
+            HashSet<string> controller = ControllerCardIds();
             for (int i = 0; i < deckCards.Count; i++)
             {
-                if (!made.Contains(deckCards[i].Value.ToString("D"))) return true;
+                if (controller.Contains(deckCards[i].Value.ToString("D"))) return true;
             }
 
             for (int p = 0; p < table.piles.Count; p++)
@@ -95,20 +97,39 @@ namespace ConsoleCards.Presentation.Composition
                 SavedPile pile = table.piles[p];
                 for (int c = 0; pile != null && c < pile.cards.Count; c++)
                 {
-                    if (!string.IsNullOrEmpty(pile.cards[c]) && !made.Contains(pile.cards[c])) return true;
+                    if (!string.IsNullOrEmpty(pile.cards[c]) && controller.Contains(pile.cards[c])) return true;
                 }
             }
 
             for (int i = 0; i < table.pieces.Count; i++)
             {
                 SavedPiece piece = table.pieces[i];
-                if (piece != null && piece.kind == SavedPiece.Card && !string.IsNullOrEmpty(piece.definitionId) && !made.Contains(piece.definitionId))
-                {
-                    return true;
-                }
+                if (piece != null && piece.kind == SavedPiece.Card && controller.Contains(piece.definitionId ?? string.Empty)) return true;
             }
 
             return false;
+        }
+
+        // The stable ids of every controller card (a card that represents a controller input) in the built-in games.
+        private HashSet<string> ControllerCardIds()
+        {
+            HashSet<string> ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            List<GameSelectEntry> entries = host.GameSelectPanel.GameSelectEntries();
+            for (int e = 0; e < entries.Count; e++)
+            {
+                GameDefinition game = entries[e]?.Game;
+                for (int s = 0; game != null && s < game.ContentSets.Count; s++)
+                {
+                    GameContentSet set = game.ContentSets[s];
+                    for (int c = 0; set != null && c < set.Cards.Count; c++)
+                    {
+                        CardDefinition card = set.Cards[c];
+                        if (card != null && card.RepresentedControllerInput.HasValue && !string.IsNullOrEmpty(card.StableId)) ids.Add(card.StableId);
+                    }
+                }
+            }
+
+            return ids;
         }
 
         // RULES-SHEET (R5): a template keeps no card the player made (piles lose them; such cards on the table go).

@@ -302,7 +302,8 @@ namespace ConsoleCards.Definitions
                     string.IsNullOrWhiteSpace(record.frontArtKey) ? PlayerContent.DefaultArtKey(artFolder, id, true) : record.frontArtKey.Trim(),
                     string.IsNullOrWhiteSpace(record.backArtKey) ? model.BackArtworkReference : record.backArtKey.Trim(),
                     ReadIcons(record.icons),
-                    (record.frame ?? string.Empty).Trim());
+                    (record.frame ?? string.Empty).Trim(),
+                    record.wholeCard);
                 if (PlayerContent.TryReadSize(record.size, out CardSizeClass size)) card.OverrideSizeClass(size);
                 newCards.Add(card);
                 newCardModel.Add(id, model.StableId);

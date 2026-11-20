@@ -44,6 +44,7 @@ namespace ConsoleCards.Presentation.Composition
             // border instead of cropped to fill.
             public bool Large;
             public bool FitPicture;
+            public bool WholeCard; // owner, 2026-11-21: the picture is the whole card face
             // Copies in each of the player's decks, by deck ID (0 or missing: not in that deck).
             public readonly Dictionary<string, int> DeckCopies = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         }

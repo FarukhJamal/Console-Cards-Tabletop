@@ -121,6 +121,7 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>Card studio: the card plays large (avatar size); pictures of another shape are fitted, not cropped.</summary>
         public bool Large;
         public bool FitPicture;
+        public bool WholeCard;
         public bool CanDuplicate;
         public bool CanImport;
 
@@ -169,6 +170,7 @@ namespace ConsoleCards.Presentation.UI
         public Action<bool, CardEditorTyped> SetSize;
         /// <summary>Card studio: CROP TO FILL (false) or FIT · ADD BORDER (true).</summary>
         public Action<bool, CardEditorTyped> SetFit;
+        public Action<bool, CardEditorTyped> SetWholeCard;
         public Action<CardEditorTyped> Duplicate;
         public Action<CardEditorTyped> ImportFolder;
         /// <summary>UNDO: back to the card as it was when it was chosen.</summary>
@@ -287,6 +289,9 @@ namespace ConsoleCards.Presentation.UI
         [Tooltip("WHEN A PICTURE IS THE WRONG SHAPE: CROP TO FILL, FIT · ADD BORDER.")]
         [SerializeField] private Button[] fitButtons = Array.Empty<Button>();
         [SerializeField] private Image[] fitFills = Array.Empty<Image>();
+        [Tooltip("Optional (2026-11-21): THE WHOLE CARD / IN THE GAME FRAME.")]
+        [SerializeField] private Button[] faceButtons = Array.Empty<Button>();
+        [SerializeField] private Image[] faceFills = Array.Empty<Image>();
         [Tooltip("The size rows' values: best size, smallest sharp size (they change with LARGE).")]
         [SerializeField] private Text bestSizeLabel;
         [SerializeField] private Text sharpSizeLabel;
@@ -544,6 +549,15 @@ namespace ConsoleCards.Presentation.UI
                 fitButtons[i].onClick.RemoveAllListeners();
                 fitButtons[i].onClick.AddListener(() => actions?.SetFit?.Invoke(fit, Typed()));
                 if (i < fitFills.Length && fitFills[i] != null) fitFills[i].color = fit == model.FitPicture ? tabOn : tabOff;
+            }
+
+            for (int i = 0; faceButtons != null && i < faceButtons.Length; i++)
+            {
+                if (faceButtons[i] == null) continue;
+                bool whole = i == 0;
+                faceButtons[i].onClick.RemoveAllListeners();
+                faceButtons[i].onClick.AddListener(() => actions?.SetWholeCard?.Invoke(whole, Typed()));
+                if (faceFills != null && i < faceFills.Length && faceFills[i] != null) faceFills[i].color = whole == model.WholeCard ? tabOn : tabOff;
             }
 
             // A large card has the same shape; its pictures want 1.4 times the pixels.

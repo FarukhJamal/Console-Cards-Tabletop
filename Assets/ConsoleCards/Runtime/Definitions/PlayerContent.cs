@@ -149,6 +149,13 @@ namespace ConsoleCards.Definitions
 
         /// <summary>A picture of another shape is fitted with a border (true) instead of cropped to fill (Card studio).</summary>
         public bool fitPicture;
+
+        /// <summary>
+        /// Owner, 2026-11-21: the front picture is the whole card face (a card scanned from a bought game, with its own
+        /// frame, name, cost and rules): no game frame, tabs or icons are drawn over it. New cards start with it on;
+        /// cards saved before it have it off, so they keep their frames.
+        /// </summary>
+        public bool wholeCard;
     }
 
     /// <summary>

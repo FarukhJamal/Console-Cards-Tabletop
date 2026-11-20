@@ -61,6 +61,7 @@ namespace ConsoleCards.Definitions
         [Tooltip("The frame variant of the game's Card Frame Style this card uses (FRAME-1), by its ID. Empty: the "
             + "game's default frame.")]
         [SerializeField] private string frameVariant;
+        [SerializeField] private bool wholeCard;
 
         public string StableId => stableId;
         public string DisplayName => displayName;
@@ -87,6 +88,9 @@ namespace ConsoleCards.Definitions
 
         /// <summary>The frame variant ID this card uses (FRAME-1); empty is the game's default frame.</summary>
         public string FrameVariant => frameVariant ?? string.Empty;
+
+        /// <summary>The front picture is the whole card face: nothing is drawn over it (a player's card, 2026-11-21).</summary>
+        public bool WholeCard => wholeCard;
 
         /// <summary>Number of icon places on a card: 4 sides, then 4 corners (<see cref="CardIconPlace"/>).</summary>
         public const int EdgeIconCount = 8;
@@ -197,7 +201,8 @@ namespace ConsoleCards.Definitions
             string frontArtworkReference,
             string backArtworkReference,
             IReadOnlyList<ConsoleSymbol> edgeIcons = null,
-            string frameVariantId = null)
+            string frameVariantId = null,
+            bool wholeCard = false)
         {
             if (model == null) throw new ArgumentNullException(nameof(model));
             if (string.IsNullOrWhiteSpace(stableId)) throw new ArgumentException("A card needs an ID.", nameof(stableId));
@@ -231,6 +236,7 @@ namespace ConsoleCards.Definitions
             card.sizeClass = model.sizeClass;
             card.consoleSymbol = model.consoleSymbol;
             card.frameVariant = frameVariantId ?? model.frameVariant ?? string.Empty;
+            card.wholeCard = wholeCard;
             card.edgeSymbols = new ConsoleSymbol[EdgeIconCount];
             for (int i = 0; i < EdgeIconCount; i++)
             {

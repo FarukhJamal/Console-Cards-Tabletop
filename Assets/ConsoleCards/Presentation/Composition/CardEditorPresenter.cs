@@ -212,6 +212,7 @@ namespace ConsoleCards.Presentation.Composition
                     AutoSave = AutoSaveEditorCard,
                     SetSize = (large, typed) => { SetEditorSize(large, typed); AutoSaveAfterChange(); },
                     SetFit = (fit, typed) => { SetEditorFit(fit, typed); AutoSaveAfterChange(); },
+                    SetWholeCard = (whole, typed) => { SetEditorWholeCard(whole, typed); AutoSaveAfterChange(); },
                     Duplicate = DuplicateEditorCard,
                     ImportFolder = ImportEditorFolder,
                     Undo = UndoEditorCard,
@@ -272,6 +273,7 @@ namespace ConsoleCards.Presentation.Composition
                 FillEditorFrame(model, frameStyle, draft);
                 model.Large = draft.Large;
                 model.FitPicture = draft.FitPicture;
+                model.WholeCard = draft.WholeCard;
                 model.CanDuplicate = true;
             }
 
@@ -367,6 +369,9 @@ namespace ConsoleCards.Presentation.Composition
                 Copies = 1,
                 WorksLikeId = model.StableId,
                 BackKey = model.BackArtworkReference ?? string.Empty,
+                // Owner, 2026-11-21: a new card's picture is the whole card (a card from a bought game), fitted whole.
+                WholeCard = true,
+                FitPicture = true,
             };
             CopyIcons(model, editorDraft.Icons); // a new card starts with the icons of the card it works like
             editorDraft.Frame = model.FrameVariant; // and its frame
@@ -508,14 +513,14 @@ namespace ConsoleCards.Presentation.Composition
         internal void FillEditorFrame(CardEditorModel model, CardFrameStyle style, CardEditorDraft draft)
         {
             CardFrameVariant variant = style != null ? style.Variant(draft.Frame) : null;
-            bool framed = variant != null && variant.ShowFrame;
+            bool framed = !draft.WholeCard && variant != null && variant.ShowFrame; // a whole-card picture: no frame
             model.FrameTexture = framed ? style.FrameTextureOf(variant) : null;
             model.FrameColor = framed ? variant.FrameColor : Color.white;
             model.SideTabTexture = framed ? style.SideTabTexture : null;
             model.CornerTabTexture = framed ? style.CornerTabTexture : null;
             model.TabColor = framed ? variant.TabColor : Color.white;
             bool[] tabs = new bool[CardDefinition.EdgeIconCount];
-            for (int i = 0; i < tabs.Length; i++) tabs[i] = draft.Icons[i] != ConsoleSymbol.None;
+            for (int i = 0; i < tabs.Length; i++) tabs[i] = !draft.WholeCard && draft.Icons[i] != ConsoleSymbol.None;
             model.TabShown = tabs;
             model.FrameName = EditorFrameName(style, draft.Frame);
             model.CanChangeFrame = style != null && style.Variants.Count > 0;
@@ -760,6 +765,7 @@ namespace ConsoleCards.Presentation.Composition
             record.frame = draft.Frame ?? string.Empty;
             record.size = draft.Large == ModelIsLarge(model) ? string.Empty : PlayerContent.SizeWord(draft.Large ? CardSizeClass.Large : CardSizeClass.Standard);
             record.fitPicture = draft.FitPicture;
+            record.wholeCard = draft.WholeCard;
         }
 
         // Only what differs from the game's card is kept; with nothing different the change is removed.
@@ -1071,6 +1077,7 @@ namespace ConsoleCards.Presentation.Composition
             draft.Frame = record.frame ?? string.Empty;
             draft.Large = PlayerContent.TryReadSize(record.size, out CardSizeClass size) ? size == CardSizeClass.Large : ModelIsLarge(model);
             draft.FitPicture = record.fitPicture;
+            draft.WholeCard = record.wholeCard;
             FillDeckCopies(draft);
             return draft;
         }
