@@ -332,7 +332,12 @@ namespace ConsoleCards.Presentation.Composition
             UnityCamera eye = targetCamera;
             if (eye == null) return false;
             Ray ray = eye.ViewportPointToRay(new Vector3(0.84f, 0.22f, 0f));
-            Plane table = new Plane(Vector3.up, new Vector3(0f, tabletopHeight, 0f));
+            // Owner, 2026-11-21 ("the rule book was in air" in a made game): the real table top, as every piece is placed
+            // (the serialized tabletopHeight is stale against the active table).
+            float top = coordinateConverter != null
+                ? coordinateConverter.ToWorldPosition(new ConsoleCards.Core.Coordinates.TableCoordinate(0d, 0d)).y
+                : tabletopHeight;
+            Plane table = new Plane(Vector3.up, new Vector3(0f, top, 0f));
             if (!table.Raycast(ray, out float distance)) return false;
             position = ray.GetPoint(distance);
             Vector3 forward = eye.transform.forward;
