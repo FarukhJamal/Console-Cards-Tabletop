@@ -111,6 +111,22 @@ namespace ConsoleCards.Presentation.Composition
             return false;
         }
 
+        // RULES-SHEET (R5): a template keeps no card the player made (piles lose them; such cards on the table go).
+        private void StripMadeCards(SavedTable table)
+        {
+            HashSet<string> made = MadeCardIds(out _);
+            if (made.Count == 0) return;
+            for (int p = table.piles.Count - 1; p >= 0; p--)
+            {
+                SavedPile pile = table.piles[p];
+                if (pile == null) continue;
+                pile.cards.RemoveAll(made.Contains);
+                if (pile.cards.Count == 0) table.piles.RemoveAt(p);
+            }
+
+            table.pieces.RemoveAll(piece => piece != null && piece.kind == SavedPiece.Card && made.Contains(piece.definitionId ?? string.Empty));
+        }
+
         /// <summary>
         /// The ids of every card the player made, in all games. <paramref name="counted"/> is false in the Editor, where
         /// made cards are the project's own (game data) and the client limit does not apply to them.

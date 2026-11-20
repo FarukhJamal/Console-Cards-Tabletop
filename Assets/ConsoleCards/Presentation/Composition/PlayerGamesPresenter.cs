@@ -129,6 +129,7 @@ namespace ConsoleCards.Presentation.Composition
                     ChangePlayers = ChangeSavePlayers,
                     SaveAsNew = typed => SavePlayerGame(typed, false),
                     SaveOver = typed => SavePlayerGame(typed, true),
+                    SaveTemplate = typed => SavePlayerGame(typed, false, true), // RULES-SHEET (R5)
                     Close = CloseGameSaveFromButton,
                     GoToStep = GoToSaveStep,
                     CyclePick = CycleSaveDeck,
@@ -153,7 +154,8 @@ namespace ConsoleCards.Presentation.Composition
                 MinimumPlayers = saveMinimumPlayers,
                 MaximumPlayers = saveMaximumPlayers,
                 CanSaveOver = activePlayerGame != null,
-                SaveOverText = activePlayerGame != null ? $"Save over {activePlayerGame.name}" : "Save over",
+                SaveOverText = activePlayerGame == null ? "Save over"
+                    : activePlayerGame.isTemplate ? $"Save over template {activePlayerGame.name}" : $"Save over {activePlayerGame.name}",
                 Status = !string.IsNullOrEmpty(status)
                     ? status
                     : table.Count == 0 && !deckOnTable
@@ -193,7 +195,9 @@ namespace ConsoleCards.Presentation.Composition
             ShowGameSave(string.Empty);
         }
 
-        internal void SavePlayerGame(GameSaveTyped typed, bool over)
+        // RULES-SHEET (R5): template saves the layout and sheet without the cards the player made. Saving a game opened
+        // from a template as new makes a game (not a template) that remembers the template.
+        internal void SavePlayerGame(GameSaveTyped typed, bool over, bool template = false)
         {
             KeepTyped(typed);
             string name = saveName.Trim();
@@ -232,8 +236,10 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            bool keepsDeck = !template || deck.Deck == null; // a template keeps a game's deck, not the player's own
+            if (template) StripMadeCards(table);
             SavedGameDeck gameDeck = new SavedGameDeck();
-            if (deckOnTable && host.matchState.TryGetContainerPlacement(gameDeckContainerId, out ContainerPlacementState deckPlacement))
+            if (keepsDeck && deckOnTable && host.matchState.TryGetContainerPlacement(gameDeckContainerId, out ContainerPlacementState deckPlacement))
             {
                 gameDeck.gameId = saveDeckGameId;
                 gameDeck.deckId = saveDeckId;
@@ -256,6 +262,9 @@ namespace ConsoleCards.Presentation.Composition
                 minutes = saveMinutes,
                 sheet = new List<SheetValue>(saveSheet), // RULES-SHEET (R2)
                 sheetText = new List<SheetText>(saveSheetText),
+                isTemplate = template || (over && activePlayerGame != null && activePlayerGame.isTemplate),
+                templateId = over && activePlayerGame != null ? activePlayerGame.templateId ?? string.Empty
+                    : activePlayerGame != null && activePlayerGame.isTemplate ? activePlayerGame.id : string.Empty,
             };
             if (!PlayerGames().Save(game, out string error))
             {

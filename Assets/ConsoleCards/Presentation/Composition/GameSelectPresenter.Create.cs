@@ -31,7 +31,7 @@ namespace ConsoleCards.Presentation.Composition
                 rows.Add(new FrontEndMyGame(
                     game.id,
                     string.IsNullOrWhiteSpace(game.name) ? "My game" : game.name,
-                    changed.Length > 0 ? $"{players} · changed {changed}" : players,
+                    (game.isTemplate ? "Template · " : string.Empty) + (changed.Length > 0 ? $"{players} · changed {changed}" : players), // R5
                     game.id == myGameDeleteArmed));
             }
 

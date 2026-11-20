@@ -19,7 +19,7 @@ namespace ConsoleCards.Editor.UI
     public static partial class TableHudBuilder
     {
         public const string MakeGamePath = Folder + "MakeGamePanel.prefab";
-        private const string MakeGameLabel = "MakeGameBoard13d"; // d: four step helps // c: the RULES step (RULES-SHEET R2, 2026-11-20) // b: the done steps' tick
+        private const string MakeGameLabel = "MakeGameBoard13e"; // e: SAVE AS TEMPLATE (RULES-SHEET R5) // d: four step helps // c: the RULES step (RULES-SHEET R2, 2026-11-20) // b: the done steps' tick
 
         private static readonly Color Teal13 = UiKit.Hex("138a8c");
         private static readonly Color Green13 = UiKit.Hex("2fd46b");
@@ -130,8 +130,9 @@ namespace ConsoleCards.Editor.UI
             rules.gameObject.SetActive(false);
             Button saveOver = Pill13(details, "SaveOver", 20, 520, 256, 48, "SAVE OVER", B.Well, B.Words, out Text saveOverLabel);
             Button saveAsNew = Pill13(details, "SaveAsNew", 284, 520, 256, 48, "SAVE AS NEW", Teal13, B.Words, out _);
-            B.TextAt(details, "SaveNote", 20, 578, 520, 16, B.medium, 11, B.Faint, TextAnchor.MiddleLeft,
-                "SAVE OVER only shows when editing a game you made.");
+            Button saveTemplate = B.SmallButton(details, "SaveTemplate", 20, 574, 200, 28, "SAVE AS TEMPLATE", B.Edge, B.Words);
+            B.TextAt(details, "SaveNote", 230, 578, 310, 20, B.medium, 11, B.Faint, TextAnchor.MiddleLeft,
+                "Template: layout and rules sheet, no cards you made.");
 
             RectTransform stepSection = B.Rect(left, "Step", 0, 0, 560, 612);
             Text stepTitle = B.TextAt(stepSection, "Title", 20, 20, 520, 24, B.bold, 15, B.Words, TextAnchor.MiddleLeft, "1 · DECK");
@@ -204,6 +205,7 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("statusLabel").objectReferenceValue = status;
             so.FindProperty("cancelButton").objectReferenceValue = cancel;
             so.FindProperty("saveOverButton").objectReferenceValue = saveOver;
+            so.FindProperty("saveTemplateButton").objectReferenceValue = saveTemplate;
             so.FindProperty("saveOverLabel").objectReferenceValue = saveOverLabel;
             so.FindProperty("saveAsNewButton").objectReferenceValue = saveAsNew;
             SetArray(so.FindProperty("stepButtons"), stepButtons);

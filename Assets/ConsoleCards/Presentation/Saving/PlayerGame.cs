@@ -59,6 +59,14 @@ namespace ConsoleCards.Presentation.Saving
 
         public List<SheetText> sheetText = new List<SheetText>();
 
+        /// <summary>
+        /// RULES-SHEET (R5): a template, a game's layout and rules sheet without the cards its creator made, to start
+        /// new games from (EDIT it, then SAVE AS NEW). <see cref="templateId"/>: the template a game was started from.
+        /// </summary>
+        public bool isTemplate;
+
+        public string templateId = string.Empty;
+
         public PlayerGameFile Normalised()
         {
             if (table == null) table = new SavedTable();
@@ -66,6 +74,7 @@ namespace ConsoleCards.Presentation.Saving
             if (deck.pose == null) deck.pose = new SavedPose();
             if (sheet == null) sheet = new List<SheetValue>();
             if (sheetText == null) sheetText = new List<SheetText>();
+            if (templateId == null) templateId = string.Empty;
             table.Normalised();
             minimumPlayers = Mathf.Clamp(minimumPlayers, 1, MaximumPlayers);
             maximumPlayers = Mathf.Clamp(maximumPlayers, minimumPlayers, MaximumPlayers);

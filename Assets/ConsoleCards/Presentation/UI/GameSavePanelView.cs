@@ -78,6 +78,9 @@ namespace ConsoleCards.Presentation.UI
         public Action<bool, int, GameSaveTyped> ChangePlayers;
         public Action<GameSaveTyped> SaveAsNew;
         public Action<GameSaveTyped> SaveOver;
+
+        /// <summary>RULES-SHEET (R5): save the layout and rules sheet as a template.</summary>
+        public Action<GameSaveTyped> SaveTemplate;
         public Action Close;
         public Action<int, GameSaveTyped> GoToStep;
         public Action<int, GameSaveTyped> CyclePick;
@@ -114,6 +117,8 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button saveOverButton;
         [SerializeField] private Text saveOverLabel;
         [SerializeField] private Button saveAsNewButton;
+        [Tooltip("Optional (RULES-SHEET R5): SAVE AS TEMPLATE on the SAVE step.")]
+        [SerializeField] private Button saveTemplateButton;
 
         [Header("Steps (L2-6b; added by Create Missing Gameplay UI Prefabs)")]
         [SerializeField] private Button[] stepButtons;
@@ -186,6 +191,7 @@ namespace ConsoleCards.Presentation.UI
             fewerMaximumButton.onClick.AddListener(HandleFewerMaximum);
             moreMaximumButton.onClick.AddListener(HandleMoreMaximum);
             saveOverButton.onClick.AddListener(HandleSaveOver);
+            if (saveTemplateButton != null) saveTemplateButton.onClick.AddListener(HandleSaveTemplate);
             saveAsNewButton.onClick.AddListener(HandleSaveAsNew);
             if (!HasSteps) return;
             for (int i = 0; i < stepButtons.Length; i++)
@@ -238,6 +244,7 @@ namespace ConsoleCards.Presentation.UI
             nextButton.gameObject.SetActive(!saving);
             saveAsNewButton.gameObject.SetActive(saving);
             saveOverButton.gameObject.SetActive(saving && model.CanSaveOver);
+            if (saveTemplateButton != null) saveTemplateButton.gameObject.SetActive(saving);
         }
 
         public override void Unbind()
@@ -260,6 +267,7 @@ namespace ConsoleCards.Presentation.UI
             Clear(moreMaximumButton);
             Clear(saveOverButton);
             Clear(saveAsNewButton);
+            Clear(saveTemplateButton);
             for (int i = 0; stepButtons != null && i < stepButtons.Length; i++) Clear(stepButtons[i]);
             Clear(backButton);
             Clear(nextButton);
@@ -281,5 +289,6 @@ namespace ConsoleCards.Presentation.UI
         private void HandleMoreMaximum() => actions?.ChangePlayers?.Invoke(false, 1, Typed());
         private void HandleSaveOver() => actions?.SaveOver?.Invoke(Typed());
         private void HandleSaveAsNew() => actions?.SaveAsNew?.Invoke(Typed());
+        private void HandleSaveTemplate() => actions?.SaveTemplate?.Invoke(Typed());
     }
 }

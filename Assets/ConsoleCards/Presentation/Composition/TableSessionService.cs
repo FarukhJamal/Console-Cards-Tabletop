@@ -843,6 +843,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             host.toyCheckPending = true; // doc 58: the zones and snap points look again
+            host.FollowRulesSheet(acceptance); // RULES-SHEET (R4): a made game's referee, on every computer alike
             if (madeHere && !host.TableFlipQuiet) host.ActiveCartridge.OnActionAccepted(acceptance); // CART-1b (not while the table flips): the game follows its own moves (landing, guided moves)
 
             if (madeHere
