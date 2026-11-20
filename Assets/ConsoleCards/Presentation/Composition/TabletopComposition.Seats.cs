@@ -492,6 +492,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (activityLogText.Length == 0) activityLogText.Append("Nothing yet.");
+            EnsureChatBound(); // CHAT-1: the Log's Chat tab sends here
             if (!runtimeUi.ShowActivityLog(activityLogText.ToString()))
             {
                 activityLogUnavailable = true;

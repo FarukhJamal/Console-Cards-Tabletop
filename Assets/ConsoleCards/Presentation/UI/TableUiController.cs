@@ -39,6 +39,8 @@ namespace ConsoleCards.Presentation.UI
         private bool playSettingsWarned;
         private bool viewSettingsWarned;
         private ActivityLogView activityLogView;
+        private Action<string> chatSend; // CHAT-1
+        private string chatText = string.Empty;
         private bool activityLogUnavailable;
         private ContentArtPanelView contentArtPanelView;
         private RuleProposalPanelView ruleProposalPanelView;
@@ -1040,6 +1042,8 @@ namespace ConsoleCards.Presentation.UI
                 {
                     activityLogView = uiService.AcquireCached<ActivityLogView>(UiPrefabIds.ActivityLog);
                     activityLogView.Show();
+                    activityLogView.BindChat(chatSend); // CHAT-1
+                    activityLogView.SetChat(chatText, false);
                 }
 
                 activityLogView.SetText(text);
@@ -1055,6 +1059,20 @@ namespace ConsoleCards.Presentation.UI
                     + exception.Message);
                 return false;
             }
+        }
+
+        /// <summary>CHAT-1 (designer note 03): where a message written in the Log's Chat tab goes.</summary>
+        public void BindChat(Action<string> send)
+        {
+            chatSend = send;
+            if (activityLogView != null && activityLogView.IsAcquired) activityLogView.BindChat(send);
+        }
+
+        /// <summary>CHAT-1: the table's messages, oldest first; <paramref name="fromOthers"/> marks the Chat tab as new.</summary>
+        public void ShowChat(string text, bool fromOthers)
+        {
+            chatText = text ?? string.Empty;
+            if (activityLogView != null && activityLogView.IsAcquired) activityLogView.SetChat(chatText, fromOthers);
         }
 
         /// <summary>Shows the hot-seat handover cover (doc 25, H2). False when its Final UI prefab is missing.</summary>

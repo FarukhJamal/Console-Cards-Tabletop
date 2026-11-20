@@ -25,6 +25,7 @@ namespace ConsoleCards.Presentation.Composition
         private const byte LiveStrokeEnd = 3;
         private const byte LiveMeasure = 4; // owner, 2026-11-03: the Measure tool is seen by everyone too
         private const byte LiveHeldCard = 5; // LIVE-HELD (owner, 2026-11-18): a card held out of a deck, hand or Console
+        private const byte LiveChat = 6; // CHAT-1 (designer note 03, 2026-11-17): a player's chat message
         private const int MaxLivePoints = 256; // per message; a longer line goes in several
         private readonly Vector3[] livePoints = new Vector3[MaxLivePoints];
 
@@ -43,6 +44,35 @@ namespace ConsoleCards.Presentation.Composition
             WriteGuid(player.Value);
             WriteVector(point);
             SendLive();
+        }
+
+        /// <summary>CHAT-1: a message written here (already cleaned); the words are never logged.</summary>
+        internal void SendChat(PlayerId player, string text)
+        {
+            if (!CanSendLive() || string.IsNullOrEmpty(text)) return;
+            BeginMessage(MsgLive);
+            writer.Write(LiveChat);
+            WriteGuid(player.Value);
+            writer.Write(text);
+            SendLive();
+        }
+
+        // CHAT-1, as LIVE-HELD: the host shows and passes on a message only from the player it names (the sender's own
+        // seat, never the message's word), so no one can write as someone else.
+        private static bool HostAllowsChat(Member from, byte[] data)
+        {
+            if (from == null || from.Player == Guid.Empty) return false;
+            try
+            {
+                BinaryReader reader = Reader(data);
+                reader.ReadByte();
+                reader.ReadByte();
+                return ReadGuid(reader) == from.Player;
+            }
+            catch (EndOfStreamException)
+            {
+                return false;
+            }
         }
 
         /// <summary>This player's measure (start and end on the table), or that it was put away.</summary>
@@ -212,6 +242,7 @@ namespace ConsoleCards.Presentation.Composition
         private void HostLive(Member from, byte[] data)
         {
             if (data.Length > 1 && data[1] == LiveHeldCard && !HostAllowsHeldCard(from, data)) return; // LIVE-HELD
+            if (data.Length > 1 && data[1] == LiveChat && !HostAllowsChat(from, data)) return; // CHAT-1
             ApplyLive(data);
             for (int i = 0; i < members.Count; i++)
             {
@@ -269,6 +300,9 @@ namespace ConsoleCards.Presentation.Composition
                             break;
                         }
 
+                    case LiveChat: // CHAT-1
+                        host.ShowRemoteChat(player, reader.ReadString());
+                        break;
                     case LiveHeldCard:
                         {
                             TabletopObjectId card = new TabletopObjectId(ReadGuid(reader));
