@@ -143,6 +143,13 @@ namespace ConsoleCards.Presentation.Composition
         private bool TryGetSheetHand(PlayerId player, out int count)
         {
             count = 0;
+            // A made game's draws go to this screen's hand (DrawTargetHandFor), not a seat's: the mover played here.
+            if (IsPlayerOnThisComputer(player) && matchState.Containers.TryGetValue(handContainerId, out ContainerState mine))
+            {
+                count = mine.Count;
+                return true;
+            }
+
             foreach (SeatState seat in matchState.Seats.Values)
             {
                 if (seat.OccupantPlayerId != player) continue;
