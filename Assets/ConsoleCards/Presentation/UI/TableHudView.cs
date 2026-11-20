@@ -84,6 +84,8 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Image redoIcon;
         [SerializeField] private Button shopButton;
         [SerializeField] private Button logButton;
+        [Tooltip("Optional: the dot on the Log button that marks a chat message nobody has read yet.")]
+        [SerializeField] private GameObject logUnread;
         [SerializeField] private Button helpButton;
         [SerializeField] private Button settingsButton;
         [SerializeField] private Button menuButton;
@@ -614,6 +616,12 @@ namespace ConsoleCards.Presentation.UI
         public void SetUndoEnabled(bool enabled) => SetIconButton(undoButton, undoIcon, enabled);
 
         public void SetRedoEnabled(bool enabled) => SetIconButton(redoButton, redoIcon, enabled);
+
+        /// <summary>Owner, 2026-11-20 ("no chat option"): marks the rail's Log button while a chat message is unread.</summary>
+        public void SetLogUnread(bool unread)
+        {
+            if (logUnread != null && logUnread.activeSelf != unread) logUnread.SetActive(unread);
+        }
 
         public void SetShopVisible(bool visible)
         {

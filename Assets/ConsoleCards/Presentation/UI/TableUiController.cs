@@ -1043,6 +1043,7 @@ namespace ConsoleCards.Presentation.UI
                     activityLogView = uiService.AcquireCached<ActivityLogView>(UiPrefabIds.ActivityLog);
                     activityLogView.Show();
                     activityLogView.BindChat(chatSend); // CHAT-1
+                    activityLogView.ChatUnreadChanged = MarkChatUnread;
                     activityLogView.SetChat(chatText, false);
                 }
 
@@ -1649,6 +1650,7 @@ namespace ConsoleCards.Presentation.UI
             tableHudView.SetShopVisible(hudShop != null);
             tableHudView.SetToolsVisible(hudChooseTool != null && IsVisible(toolBarView));
             tableHudView.SetHandStyleVisible(hudHandStyle != null && IsVisible(toolBarView));
+            tableHudView.SetLogUnread(activityLogView != null && activityLogView.IsAcquired && activityLogView.ChatUnread);
             ApplyTableHudMode();
         }
 
@@ -1687,8 +1689,16 @@ namespace ConsoleCards.Presentation.UI
             else
             {
                 activityLogView.Show();
-                activityLogView.SetExpanded(true);
+                // Owner, 2026-11-20: with a message unread, the Log opens on its Chat tab.
+                if (activityLogView.ChatUnread && activityLogView.HasChat) activityLogView.OpenChat();
+                else activityLogView.SetExpanded(true);
             }
+        }
+
+        // The rail's Log button carries a dot while a chat message is unread.
+        private void MarkChatUnread(bool unread)
+        {
+            if (IsVisible(tableHudView)) tableHudView.SetLogUnread(unread);
         }
 
         /// <summary>Opens the rulebook (HUD-B): the book button, or the rulebook lying on the table.</summary>

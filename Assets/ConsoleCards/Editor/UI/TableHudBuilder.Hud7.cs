@@ -26,7 +26,7 @@ namespace ConsoleCards.Editor.UI
     /// </summary>
     public static partial class TableHudBuilder
     {
-        private const string HudLabel = "HudBoard7B9"; // B9: the rail has a TOOLS header that hides and shows its buttons (designer note 05, 2026-11-17) // B8: the CC logo picture (owner, 2026-10-30) // B7: Draw is I, the player chip is a rounded box like the hint // B5: board 17's Draw on the rail and its bar
+        private const string HudLabel = "HudBoard7B10"; // B10: the Log (with its Chat) is on the rail, with a mark for unread messages (owner, 2026-11-20: "no chat option") // B9: the rail has a TOOLS header that hides and shows its buttons (designer note 05, 2026-11-17) // B8: the CC logo picture (owner, 2026-10-30) // B7: Draw is I, the player chip is a rounded box like the hint // B5: board 17's Draw on the rail and its bar
         private const string HudArt = "Assets/ConsoleCards/Content/UI/Board/Hud/";
         private const float K = 1.5f; // board pixels to the 1920 x 1080 canvas
 
@@ -50,7 +50,7 @@ namespace ConsoleCards.Editor.UI
 
         private static readonly string[] HudIcons =
         {
-            "HudSelect", "HudPan", "HudPing", "HudMeasure", "HudUndo", "HudRedo", "HudMenu", "HudBook", "HudToolbox",
+            "HudSelect", "HudPan", "HudPing", "HudMeasure", "HudUndo", "HudRedo", "HudMenu", "HudBook", "HudToolbox", "HudChat",
         };
 
         private static void BuildHudBoard()
@@ -229,6 +229,13 @@ namespace ConsoleCards.Editor.UI
             Rail7Rule(railBody, "Rule1");
             Button undo = Rail7Button(railBody, "Undo", "HudUndo", "<", "Undo · Ctrl Z", out Image undoIcon, out _);
             Button redo = Rail7Button(railBody, "Redo", "HudRedo", ">", "Redo · Ctrl Y", out Image redoIcon, out _);
+            // Owner, 2026-11-20 ("no chat option"): the Log, with its Chat tab, is on the rail under Redo; a dot on it
+            // marks a message nobody has read yet.
+            Button log = Rail7Button(railBody, "Log", "HudChat", "L", "Chat and log · L", out _, out _);
+            RectTransform unreadRect = Rect("Unread", (RectTransform)log.transform, Vector2.one, Vector2.one, Vector2.one,
+                new Vector2(-7f, -7f), new Vector2(13f, 13f));
+            Shape(unreadRect, Orange, circle).raycastTarget = false;
+            unreadRect.gameObject.SetActive(false);
             Button shop = Rail7Button(railBody, "Shop", null, "$", "Shop", out _, out _);
             Rail7Rule(railBody, "Rule2");
             Button menu = Rail7Button(railBody, "Menu", "HudMenu", "=", "Game menu · Esc", out _, out _);
@@ -237,7 +244,6 @@ namespace ConsoleCards.Editor.UI
             RectTransform hidden = Rect("NotOnBoard", root, Vector2.zero, Vector2.zero, Vector2.zero, Vector2.zero,
                 new Vector2(72f, 72f));
             hidden.gameObject.SetActive(false);
-            Button log = Rail7Button(hidden, "Log", null, "L", "What happened · L", out _, out _);
             Button help = Rail7Button(hidden, "Help", null, "?", "Help", out _, out _);
             Button settings = Rail7Button(hidden, "Settings", null, "*", "Settings", out _, out _);
             Button handStyle = Rail7Button(hidden, "HandStyle", null, "H", "Hand: fan / row", out _, out _);
@@ -316,6 +322,7 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("redoIcon").objectReferenceValue = redoIcon;
             so.FindProperty("shopButton").objectReferenceValue = shop;
             so.FindProperty("logButton").objectReferenceValue = log;
+            so.FindProperty("logUnread").objectReferenceValue = unreadRect.gameObject;
             so.FindProperty("helpButton").objectReferenceValue = help;
             so.FindProperty("settingsButton").objectReferenceValue = settings;
             so.FindProperty("menuButton").objectReferenceValue = menu;

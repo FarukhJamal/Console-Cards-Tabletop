@@ -138,10 +138,22 @@ namespace ConsoleCards.Presentation.Composition
                 // AVATAR-1: the player's picture stands just past the table's edge behind the Console, facing the board.
                 if (persona.Avatar != null)
                 {
-                    Vector3 avatarPlace = console + (outward * (edge + (personaSet.AvatarFromEdge * unit)));
-                    avatarPlace.y = persona.EdgeTop + (personaSet.AvatarLift * unit);
+                    // Owner, 2026-11-20 ("clipping nameplates"): turned to the camera (note 02) a side seat's picture
+                    // swung its near side back over the table and through that seat's standing hand, and the nameplate
+                    // under it (note 04) hung below the rim. The stand now keeps its nearest point as far past the
+                    // edge as the picture's foot used to be (the set's distance), and its lowest point (the nameplate)
+                    // at the set's height above the table, whichever way it is turned.
                     UnityEngine.Camera viewer = hitResolver != null ? hitResolver.TargetCamera : null;
-                    persona.Avatar.Place(avatarPlace, AvatarFacing(avatarPlace, outward, viewer), unit);
+                    Quaternion facing = AvatarFacing(console, outward, viewer);
+                    persona.Avatar.GetExtent(out float halfWidth, out float bottom, out float top);
+                    Vector3 standRight = facing * Vector3.right;
+                    Vector3 standUp = facing * Vector3.up;
+                    float upToTable = -Vector3.Dot(standUp, outward);
+                    float reach = (halfWidth * Mathf.Abs(Vector3.Dot(standRight, outward)))
+                        + Mathf.Max(0f, Mathf.Max(top * upToTable, bottom * upToTable));
+                    Vector3 avatarPlace = console + (outward * (edge + (personaSet.AvatarFromEdge * unit) + (reach * unit)));
+                    avatarPlace.y = persona.EdgeTop + (personaSet.AvatarLift * unit) - (Mathf.Min(0f, bottom * standUp.y) * unit);
+                    persona.Avatar.Place(avatarPlace, facing, unit);
                     persona.Avatar.SetGlow(theirTurn ? personaSet.AvatarGlowTurn * pulse : personaSet.AvatarGlowIdle);
                     // Owner, 2026-11-03 (the hand view): seen from behind (your own seat's picture, with the camera
                     // at your seat) the picture covered the bottom of the screen; it hides while the camera is behind it.

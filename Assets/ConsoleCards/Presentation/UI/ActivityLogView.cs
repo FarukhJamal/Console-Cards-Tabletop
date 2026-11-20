@@ -53,6 +53,7 @@ namespace ConsoleCards.Presentation.UI
         private Vector2 fullViewportMax;
         private bool chatMode;
         private bool chatUnread;
+        private bool chatUnreadTold;
         private bool chatBaseKnown;
         private Vector2 chatBaseMin;
         private Action<string> chatSender;
@@ -60,6 +61,12 @@ namespace ConsoleCards.Presentation.UI
         private bool Peeks => peekHeight > 0f && panelRect != null && viewport != null;
 
         public bool IsExpanded => expanded;
+
+        /// <summary>CHAT-1: a message from someone else that has not been seen on the Chat tab yet.</summary>
+        public bool ChatUnread => chatUnread;
+
+        /// <summary>Owner, 2026-11-20: told when <see cref="ChatUnread"/> changes (the rail's Log button shows it).</summary>
+        public Action<bool> ChatUnreadChanged;
 
         /// <summary>CHAT-1: the prefab has the Chat tab, its list and its message box.</summary>
         public bool HasChat => chatTab != null && chatBody != null && chatRow != null && chatField != null;
@@ -193,6 +200,12 @@ namespace ConsoleCards.Presentation.UI
             {
                 chatTabLabel.color = chatMode && expanded ? tabOn : tabOff;
                 chatTabLabel.text = chatUnread ? "CHAT  NEW" : "CHAT";
+            }
+
+            if (chatUnreadTold != chatUnread)
+            {
+                chatUnreadTold = chatUnread;
+                ChatUnreadChanged?.Invoke(chatUnread);
             }
         }
 

@@ -85,6 +85,28 @@ namespace ConsoleCards.Presentation.Feedback
             appliedGlow = -1f;
         }
 
+        /// <summary>
+        /// Owner, 2026-11-20 ("clipping nameplates"): how far the stand reaches in its own units, from its pivot: half
+        /// its width, its lowest point (the name tag's bottom when the tag is under the picture) and its highest.
+        /// </summary>
+        public void GetExtent(out float halfWidth, out float bottom, out float top)
+        {
+            halfWidth = 0f;
+            bottom = 0f;
+            top = 0f;
+            if (frame == null) return;
+            Transform frameTransform = frame.transform;
+            halfWidth = frameTransform.localScale.x * 0.5f;
+            top = frameTransform.localPosition.y + (frameTransform.localScale.y * 0.5f);
+            bottom = Mathf.Min(0f, frameTransform.localPosition.y - (frameTransform.localScale.y * 0.5f));
+            if (tag != null && tag.gameObject.activeSelf && tagPlate != null)
+            {
+                float tagHalf = tagPlate.transform.localScale.y * 0.5f;
+                bottom = Mathf.Min(bottom, tag.localPosition.y - tagHalf);
+                top = Mathf.Max(top, tag.localPosition.y + tagHalf);
+            }
+        }
+
         public void Apply(Texture2D avatar, Color seatColour)
         {
             if (block == null) block = new MaterialPropertyBlock();

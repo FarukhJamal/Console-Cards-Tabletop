@@ -174,7 +174,7 @@ MonoBehaviour:
     layer: 1
     retention: 0
   - id: platform.table-hud
-    prefab: {fileID: 8469724052970794796, guid: 0042263a2c1a1fa479c09173891eb063, type: 3}
+    prefab: {fileID: 1254185023350748841, guid: 0042263a2c1a1fa479c09173891eb063, type: 3}
     layer: 1
     retention: 0
   - id: platform.table-rulebook
