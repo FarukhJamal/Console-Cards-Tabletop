@@ -1311,6 +1311,7 @@ namespace ConsoleCards.Presentation.Composition
             DiscardPileView view = visual.GetView<DiscardPileView>();
             string pileName = ResolveTemplatePileName(containerId); // D1
             ConfigureContainerLabel(visual.Label, pileName ?? "DISCARD");
+            UprightForViewer.Keep(visual.Label); // designer note 02: every discard's label faces the camera
             if (pileName != null)
             {
                 visual.Label.text = StackedPileLabel(pileName);

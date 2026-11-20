@@ -212,6 +212,7 @@ namespace ConsoleCards.Presentation.Composition
                 labelRoot.transform.localScale = Vector3.one * 0.45f;
                 TextMesh label = labelRoot.AddComponent<TextMesh>();
                 ConfigureWorldLabel(label, $"P{playerNumber}", 0.16f, 64);
+                UprightForViewer.Keep(label); // designer note 02
                 host.ApplyLabelRendererHide(label, TableVisualHide.PawnOwnerLabel);
                 officialPawnLabels.Add(labelRoot);
             }
@@ -345,6 +346,7 @@ namespace ConsoleCards.Presentation.Composition
                 displayLabel,
                 CoinAreaLabelCharacterSize,
                 CoinAreaLabelFontSize);
+            UprightForViewer.Keep(label); // designer note 02
             view.Configure(label);
 
             host.ApplyAuthoredPose(root.transform, pose);
@@ -391,6 +393,7 @@ namespace ConsoleCards.Presentation.Composition
             visual.ValidateReferences();
             DeckView view = visual.GetView<DeckView>();
             ConfigureContainerLabel(visual.Label, displayLabel);
+            UprightForViewer.Keep(visual.Label); // designer note 02: the card zones' labels face the camera
             visual.DropTarget.ClearConfiguration();
             visual.DropTarget.enabled = false;
             visual.TargetCollider.enabled = false;
@@ -679,6 +682,7 @@ namespace ConsoleCards.Presentation.Composition
             visual.ValidateReferences();
             StackView view = visual.GetView<StackView>();
             ConfigureContainerLabel(visual.Label, name);
+            UprightForViewer.Keep(visual.Label); // designer note 02
             GameTemplatePileStyle style = pileStyle ?? GameTemplatePileStyle.DefaultFor(container.Kind);
             view.ConfigureTableRest(true, style.MaximumPileHeight);
 

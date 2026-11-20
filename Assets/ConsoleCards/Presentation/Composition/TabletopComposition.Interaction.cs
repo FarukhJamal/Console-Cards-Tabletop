@@ -123,6 +123,7 @@ namespace ConsoleCards.Presentation.Composition
                 string.Empty,
                 CoinAreaLabelCharacterSize,
                 CoinAreaLabelFontSize);
+            UprightForViewer.Keep(label); // designer note 02
             view.Bind(hand, zone, coordinateConverter, Registry.cardViews, label);
             return view;
         }

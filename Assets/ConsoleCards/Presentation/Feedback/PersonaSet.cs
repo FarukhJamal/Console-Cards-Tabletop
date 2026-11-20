@@ -67,7 +67,7 @@ namespace ConsoleCards.Presentation.Feedback
         [SerializeField] private float avatarGlowIdle = 0.75f;
         [SerializeField] private float avatarGlowTurn = 1.6f;
         [Tooltip("AVATAR-2: the player's name tag on their avatar: over its head, or in front (under the picture).")]
-        [SerializeField] private NameTagPlace avatarNameTag = NameTagPlace.OverHead;
+        [SerializeField] private NameTagPlace avatarNameTag = NameTagPlace.InFront; // designer note 04 (2026-11-17): one nameplate beneath each player icon
         [Tooltip("The name tag's letter size (table units).")]
         [SerializeField] private float nameTagLetters = 0.11f;
         [Tooltip("Room between the picture's frame and the name tag (table units).")]

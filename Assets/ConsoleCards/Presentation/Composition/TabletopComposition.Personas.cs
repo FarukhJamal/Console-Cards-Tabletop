@@ -140,11 +140,11 @@ namespace ConsoleCards.Presentation.Composition
                 {
                     Vector3 avatarPlace = console + (outward * (edge + (personaSet.AvatarFromEdge * unit)));
                     avatarPlace.y = persona.EdgeTop + (personaSet.AvatarLift * unit);
-                    persona.Avatar.Place(avatarPlace, Quaternion.LookRotation(outward, Vector3.up) * Quaternion.Euler(personaSet.AvatarLean, 0f, 0f), unit);
+                    UnityEngine.Camera viewer = hitResolver != null ? hitResolver.TargetCamera : null;
+                    persona.Avatar.Place(avatarPlace, AvatarFacing(avatarPlace, outward, viewer), unit);
                     persona.Avatar.SetGlow(theirTurn ? personaSet.AvatarGlowTurn * pulse : personaSet.AvatarGlowIdle);
                     // Owner, 2026-11-03 (the hand view): seen from behind (your own seat's picture, with the camera
                     // at your seat) the picture covered the bottom of the screen; it hides while the camera is behind it.
-                    UnityEngine.Camera viewer = hitResolver != null ? hitResolver.TargetCamera : null;
                     bool behind = viewer != null && Vector3.Dot(viewer.transform.position - avatarPlace, outward) > 0f;
                     if (persona.Avatar.gameObject.activeSelf == behind) persona.Avatar.gameObject.SetActive(!behind);
                 }
@@ -191,6 +191,27 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             for (int i = shown; i < seatPersonas.Count; i++) HidePersona(seatPersonas[i]);
+        }
+
+        // Designer note 02 (2026-11-17): a player's picture and the nameplate under it keep turning to face this
+        // computer's camera: they turn with the camera's view (so every picture stands straight on the screen) and lean
+        // back as far as the camera looks down (at least the set's lean, at most 70 degrees), so they read from every
+        // seat and height. Without a camera it faces the board as before.
+        private const float AvatarMostLean = 70f;
+
+        private Quaternion AvatarFacing(Vector3 avatarPlace, Vector3 outward, UnityEngine.Camera viewer)
+        {
+            Vector3 away = viewer != null ? viewer.transform.forward : Vector3.zero;
+            Vector3 flat = new Vector3(away.x, 0f, away.z);
+            float flatLength = flat.magnitude;
+            if (flatLength < 1e-4f)
+            {
+                return Quaternion.LookRotation(outward, Vector3.up) * Quaternion.Euler(personaSet.AvatarLean, 0f, 0f);
+            }
+
+            float looksDown = Mathf.Atan2(-away.y, flatLength) * Mathf.Rad2Deg;
+            float lean = Mathf.Clamp(looksDown, personaSet.AvatarLean, Mathf.Max(personaSet.AvatarLean, AvatarMostLean));
+            return Quaternion.LookRotation(flat / flatLength, Vector3.up) * Quaternion.Euler(lean, 0f, 0f);
         }
 
         // How far out from the Console the table's surface ends (world units), found by looking straight down at the
