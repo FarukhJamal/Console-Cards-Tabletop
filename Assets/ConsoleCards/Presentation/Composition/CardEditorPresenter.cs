@@ -74,6 +74,9 @@ namespace ConsoleCards.Presentation.Composition
         internal readonly List<GameDefinition> editorGames = new List<GameDefinition>();
         internal readonly List<CardDefinition> editorGameCards = new List<CardDefinition>();
         internal GameDefinition editorGame;
+        // Owner, 2026-11-21: the studio and the deck builder open on "Your cards" unless the player chose another game
+        // with < > (other code loads a game's cards too, e.g. to put a deck on the table; that is not the player's pick).
+        internal GameDefinition editorGamePicked;
         // Pictures for a game other than this table's (the table's own art service is used for the table's game).
         internal ContentArtService editorOtherArt;
         internal PlayerCardsFile editorCards;
@@ -112,11 +115,17 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            GameDefinition start = editorGame != null && editorGames.Contains(editorGame) ? editorGame : editorGames[0];
+            GameDefinition start = StartEditorGame();
             ContentArtService previous = UseEditorGame(start);
             TakeEditorUndo();
             ShowCardEditor(string.Empty);
             previous?.Dispose();
+        }
+
+        // The game the studio or the deck builder opens on: the one the player last chose, else "Your cards" (first).
+        internal GameDefinition StartEditorGame()
+        {
+            return editorGamePicked != null && editorGames.Contains(editorGamePicked) ? editorGamePicked : editorGames[0];
         }
 
         // Every game the platform has: this table's game, then each game box in the component library (DLC games
@@ -187,6 +196,7 @@ namespace ConsoleCards.Presentation.Composition
             DropUnsavedNewCard();
             int index = Math.Max(0, editorGames.IndexOf(editorGame));
             GameDefinition next = editorGames[((index + step) % editorGames.Count + editorGames.Count) % editorGames.Count];
+            editorGamePicked = next;
             ContentArtService previous = UseEditorGame(next);
             TakeEditorUndo();
             ShowCardEditor(PlayerLibrary.IsLibrary(next) ? "Now editing your own cards (Your cards)." : $"Now editing {next.DisplayName}'s cards.");

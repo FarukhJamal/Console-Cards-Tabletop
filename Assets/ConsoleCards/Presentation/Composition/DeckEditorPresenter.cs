@@ -114,7 +114,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            GameDefinition start = host.CardEditorPanel.editorGame != null && host.CardEditorPanel.editorGames.Contains(host.CardEditorPanel.editorGame) ? host.CardEditorPanel.editorGame : host.CardEditorPanel.editorGames[0];
+            GameDefinition start = host.CardEditorPanel.StartEditorGame();
             ContentArtService previous = host.CardEditorPanel.UseEditorGame(start);
             deckEditorSelectedId = CardEditorPresenter.GameDeckId;
             deckEditorShowAll = true;
@@ -289,6 +289,7 @@ namespace ConsoleCards.Presentation.Composition
 
             int index = Math.Max(0, host.CardEditorPanel.editorGames.IndexOf(host.CardEditorPanel.editorGame));
             GameDefinition next = host.CardEditorPanel.editorGames[((index + step) % host.CardEditorPanel.editorGames.Count + host.CardEditorPanel.editorGames.Count) % host.CardEditorPanel.editorGames.Count];
+            host.CardEditorPanel.editorGamePicked = next;
             ContentArtService previous = host.CardEditorPanel.UseEditorGame(next);
             deckEditorSelectedId = CardEditorPresenter.GameDeckId;
             TakeDeckEditorSnapshot();

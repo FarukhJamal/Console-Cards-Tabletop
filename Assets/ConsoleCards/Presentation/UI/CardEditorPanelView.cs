@@ -485,7 +485,6 @@ namespace ConsoleCards.Presentation.UI
                 tabButtons[i].onClick.AddListener(() => ShowTab(which));
             }
 
-            if (filterLabels.Length > 0 && filterLabels[0] != null) filterLabels[0].text = "ALL " + model.Rows.Count;
             if (templateButton != null)
             {
                 templateButton.onClick.RemoveAllListeners();
@@ -637,27 +636,52 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
-        // ALL, YOURS (your cards and new ones), NO PICTURE, ⚠ SHAPE (a picture that is not the card's shape).
+        // ALL, YOURS (your cards, new ones and the game's cards you changed), NO PICTURE, WRONG SHAPE (a picture that
+        // is not the card's shape). Each chip says how many cards it holds (owner, 2026-11-21: "filters not working").
         private void ApplyFilter()
         {
             string find = searchInput != null ? searchInput.text.Trim() : string.Empty;
+            int all = 0;
+            int yours = 0;
+            int noPicture = 0;
+            int wrongShape = 0;
             for (int i = 0; i < rowViews.Count; i++)
             {
                 CardEditorRowView view = rowViews[i];
                 if (view == null) continue;
                 CardEditorRowModel row = view.Row;
-                bool shown = find.Length == 0 || row.Name.IndexOf(find, StringComparison.OrdinalIgnoreCase) >= 0;
-                if (shown && filter == 1) shown = row.Detail.Contains("Your card") || row.Detail.StartsWith("New card", StringComparison.Ordinal);
-                if (shown && filter == 2) shown = row.Thumbnail == null;
-                if (shown && filter == 3) shown = row.Thumbnail != null && !RightShape(row.Thumbnail);
+                bool found = find.Length == 0 || row.Name.IndexOf(find, StringComparison.OrdinalIgnoreCase) >= 0;
+                bool isYours = row.Detail.Contains("Your card") || row.Detail.StartsWith("New card", StringComparison.Ordinal)
+                    || row.Detail.StartsWith("Changed", StringComparison.Ordinal);
+                bool isMissing = row.Thumbnail == null;
+                bool isWrong = !isMissing && !RightShape(row.Thumbnail);
+                if (found)
+                {
+                    all++;
+                    if (isYours) yours++;
+                    if (isMissing) noPicture++;
+                    if (isWrong) wrongShape++;
+                }
+
+                bool shown = found && (filter == 0 || (filter == 1 && isYours) || (filter == 2 && isMissing) || (filter == 3 && isWrong));
                 if (view.gameObject.activeSelf != shown) view.gameObject.SetActive(shown);
             }
+
+            SetFilterLabel(0, "ALL", all);
+            SetFilterLabel(1, "YOURS", yours);
+            SetFilterLabel(2, "NO PICTURE", noPicture);
+            SetFilterLabel(3, "WRONG SHAPE", wrongShape);
 
             for (int i = 0; i < filterFills.Length; i++)
             {
                 if (filterFills[i] != null) filterFills[i].color = i == filter ? filterOn : filterOff;
                 if (i < filterLabels.Length && filterLabels[i] != null) filterLabels[i].color = i == filter ? filterOnWords : filterOffWords;
             }
+        }
+
+        private void SetFilterLabel(int index, string name, int count)
+        {
+            if (index < filterLabels.Length && filterLabels[index] != null) filterLabels[index].text = name + " " + count;
         }
 
         private void CropToFill(RawImage image, Texture picture)
