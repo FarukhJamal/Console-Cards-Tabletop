@@ -36,6 +36,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             model.MyGames = rows;
+            model.MakeGameFromText = MakeGameFromText(mine); // doc 63 T1 (owner, 2026-11-21): START FROM
         }
 
         // "today", "yesterday", "3 days ago", or the date.
@@ -55,9 +56,11 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // MAKE A GAME: an empty table, then the save steps.
+        // Doc 63 T1 (owner, 2026-11-21): or a new, unsaved copy of the game chosen in START FROM.
         private void MakeGameFromFrontEnd()
         {
             myGameDeleteArmed = string.Empty;
+            if (StartFromChosenSource()) return;
             pendingOpenSave = true;
             StartSandbox();
             if (host.runtimeUi != null && host.runtimeUi.IsGameSelectOpen) pendingOpenSave = false; // it did not start

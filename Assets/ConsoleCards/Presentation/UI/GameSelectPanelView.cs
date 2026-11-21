@@ -73,6 +73,8 @@ namespace ConsoleCards.Presentation.UI
         public string RoomSoundText = string.Empty;
         /// <summary>CREATE › YOUR GAMES (board 4): the games this profile made, newest first.</summary>
         public IReadOnlyList<FrontEndMyGame> MyGames = Array.Empty<FrontEndMyGame>();
+        /// <summary>Doc 63 T1 (owner, 2026-11-21): CREATE › MAKE A GAME › START FROM, the source shown between its &lt; &gt;.</summary>
+        public string MakeGameFromText = "Empty table";
 
         // Boards 1–3 (Home, Library, Game sheet).
         /// <summary>Home's CONTINUE card: a game table is behind the front end (CONTINUE goes back to it).</summary>
@@ -268,6 +270,8 @@ namespace ConsoleCards.Presentation.UI
         public Action<string> CopyMyGame;
         public Action<string, string> RenameMyGame;
         public Action<string> DeleteMyGame;
+        /// <summary>Doc 63 T1 (owner, 2026-11-21): START FROM &lt; &gt;, -1 or +1.</summary>
+        public Action<int> CycleMakeGameFrom;
         /// <summary>Home (board 1): PLAY AGAIN starts the game played last with its last settings.</summary>
         public Action PlayAgain;
 

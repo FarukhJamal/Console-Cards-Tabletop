@@ -161,7 +161,7 @@ namespace ConsoleCards.Presentation.Composition
                 RulesText = saveRules,
                 MinimumPlayers = saveMinimumPlayers,
                 MaximumPlayers = saveMaximumPlayers,
-                CanSaveOver = activePlayerGame != null,
+                CanSaveOver = activePlayerGame != null && !activeIsDraft, // doc 63 T1 (owner, 2026-11-21): a START FROM copy is new
                 SaveOverText = activePlayerGame == null ? "Save over"
                     : activePlayerGame.isTemplate ? $"Save over template {activePlayerGame.name}" : $"Save over {activePlayerGame.name}",
                 Status = !string.IsNullOrEmpty(status)
@@ -204,11 +204,19 @@ namespace ConsoleCards.Presentation.Composition
             ShowGameSave(string.Empty);
         }
 
-        // RULES-SHEET (R5): template saves the layout and sheet without the cards the player made. Saving a game opened
-        // from a template as new makes a game (not a template) that remembers the template.
+        // RULES-SHEET (R5): a template is a game to start new games from. Saving a game opened from a template as new
+        // makes a game (not a template) that remembers the template.
+        // Doc 63 T1 (owner, 2026-11-21): a template keeps everything, the cards the player made too (they are in the
+        // shared "Your cards" library, so its deck and piles stay valid).
         internal void SavePlayerGame(GameSaveTyped typed, bool over, bool template = false)
         {
             KeepTyped(typed);
+            if (over && activeIsDraft)
+            {
+                ShowGameSave("This game is not saved yet: use SAVE AS NEW."); // doc 63 T1 (owner, 2026-11-21)
+                return;
+            }
+
             string name = saveName.Trim();
             if (name.Length == 0)
             {
@@ -245,10 +253,8 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            bool keepsDeck = !template || deck.Deck == null; // a template keeps a game's deck, not the player's own
-            if (template) StripMadeCards(table);
             SavedGameDeck gameDeck = new SavedGameDeck();
-            if (keepsDeck && deckOnTable && host.matchState.TryGetContainerPlacement(gameDeckContainerId, out ContainerPlacementState deckPlacement))
+            if (deckOnTable && host.matchState.TryGetContainerPlacement(gameDeckContainerId, out ContainerPlacementState deckPlacement))
             {
                 gameDeck.gameId = saveDeckGameId;
                 gameDeck.deckId = saveDeckId;
@@ -273,13 +279,14 @@ namespace ConsoleCards.Presentation.Composition
                 sheetText = new List<SheetText>(saveSheetText),
                 isTemplate = template || (over && activePlayerGame != null && activePlayerGame.isTemplate),
                 templateId = over && activePlayerGame != null ? activePlayerGame.templateId ?? string.Empty
+                    : activeIsDraft && activePlayerGame != null ? activePlayerGame.templateId ?? string.Empty // doc 63 T1: its source
                     : activePlayerGame != null && activePlayerGame.isTemplate ? activePlayerGame.id : string.Empty,
                 // Doc 63 G1 (owner, 2026-11-21): the table it is played on, and its cover picture.
                 hasTable = host.CurrentTableSpec != null,
                 tableSpec = host.CurrentTableSpec != null ? host.CurrentTableSpec.Copy() : new TableSpec(),
                 coverPicture = saveCoverPicture,
             };
-            if (!ApplySaveLayout(game, template, out string layoutProblem)) // doc 63 G2: a count's layout, or the default
+            if (!ApplySaveLayout(game, false, out string layoutProblem)) // doc 63 G2: a count's layout, or the default (doc 63 T1: cards kept)
             {
                 ShowGameSave(layoutProblem);
                 return;
@@ -300,6 +307,7 @@ namespace ConsoleCards.Presentation.Composition
             // The table is now that game: its name on the chip and its rules on the rules card.
             activeLayoutPlayers = EffectiveLayoutPlayers(); // doc 63 G2
             activePlayerGame = game;
+            activeIsDraft = false; // doc 63 T1 (owner, 2026-11-21): saved now
             ForgetChosenCover();
             host.runtimeUi?.CloseGameSave();
             host.SessionService.ShowActiveSessionUi();
@@ -791,7 +799,9 @@ namespace ConsoleCards.Presentation.Composition
         // ---------- the table save file ----------
 
         // Everything players put on the table, by kind, position and contents (never the game's own fixed pieces).
-        internal SavedTable CaptureTable()
+        // Doc 63 T1 (owner, 2026-11-21): withGamePieces also takes a built-in game's own pieces and its seats' Consoles
+        // (START FROM a built-in game captures its freshly dealt table this way).
+        internal SavedTable CaptureTable(bool withGamePieces = false)
         {
             SavedTable table = new SavedTable();
             if (host.matchState == null) return table;
@@ -805,7 +815,7 @@ namespace ConsoleCards.Presentation.Composition
                         ? SavedPile.Stack
                         : container.Kind == ContainerKind.DiscardPile ? SavedPile.DiscardPile : null;
                 if (kind == null
-                    || host.matchState.IsTemplateContainer(container.Id)
+                    || (!withGamePieces && host.matchState.IsTemplateContainer(container.Id))
                     || (container.Id.Equals(gameDeckContainerId) && SaveDeckOnTable()) // the game's deck: saved by reference
                     || !host.matchState.TryGetContainerPlacement(container.Id, out ContainerPlacementState placement))
                 {
@@ -828,7 +838,7 @@ namespace ConsoleCards.Presentation.Composition
 
             foreach (CardInstanceState card in host.matchState.Cards.Values)
             {
-                if (!card.BaseState.ContainerId.IsEmpty || host.matchState.IsTemplateObject(card.BaseState.Id)) continue;
+                if (!card.BaseState.ContainerId.IsEmpty || (!withGamePieces && host.matchState.IsTemplateObject(card.BaseState.Id))) continue;
                 if (leaveDealt && startDealtCards.Contains(card.BaseState.Id)) continue; // doc 63 G1
                 table.pieces.Add(new SavedPiece
                 {
@@ -841,19 +851,19 @@ namespace ConsoleCards.Presentation.Composition
 
             foreach (PawnState pawn in host.matchState.Pawns.Values)
             {
-                if (!pawn.BaseState.ContainerId.IsEmpty || host.matchState.IsTemplateObject(pawn.BaseState.Id)) continue;
+                if (!pawn.BaseState.ContainerId.IsEmpty || (!withGamePieces && host.matchState.IsTemplateObject(pawn.BaseState.Id))) continue;
                 table.pieces.Add(new SavedPiece { kind = SavedPiece.Pawn, pose = SavePose(pawn.BaseState.Pose) });
             }
 
             foreach (TokenState token in host.matchState.Tokens.Values)
             {
-                if (!token.BaseState.ContainerId.IsEmpty || host.matchState.IsTemplateObject(token.BaseState.Id)) continue;
+                if (!token.BaseState.ContainerId.IsEmpty || (!withGamePieces && host.matchState.IsTemplateObject(token.BaseState.Id))) continue;
                 table.pieces.Add(new SavedPiece { kind = SavedPiece.Token, pose = SavePose(token.BaseState.Pose) });
             }
 
             foreach (DieState die in host.matchState.Dice.Values)
             {
-                if (!die.BaseState.ContainerId.IsEmpty || host.matchState.IsTemplateObject(die.BaseState.Id)) continue;
+                if (!die.BaseState.ContainerId.IsEmpty || (!withGamePieces && host.matchState.IsTemplateObject(die.BaseState.Id))) continue;
                 table.pieces.Add(new SavedPiece { kind = SavedPiece.Die, sides = die.SideCount, pose = SavePose(die.BaseState.Pose) });
             }
 
@@ -861,6 +871,8 @@ namespace ConsoleCards.Presentation.Composition
             {
                 table.consoles.Add(new SavedConsole { showsBack = console.Console.ShowsBack, pose = SavePose(console.Pose) });
             }
+
+            if (withGamePieces) AddSeatConsoles(table.consoles); // doc 63 T1
 
             foreach (PlacedBoardState board in host.matchState.PlacedBoards.Values)
             {

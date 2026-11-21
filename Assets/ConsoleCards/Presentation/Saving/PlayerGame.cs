@@ -61,8 +61,10 @@ namespace ConsoleCards.Presentation.Saving
         public List<SheetText> sheetText = new List<SheetText>();
 
         /// <summary>
-        /// RULES-SHEET (R5): a template, a game's layout and rules sheet without the cards its creator made, to start
-        /// new games from (EDIT it, then SAVE AS NEW). <see cref="templateId"/>: the template a game was started from.
+        /// RULES-SHEET (R5): a template, a game to start new games from (EDIT it, then SAVE AS NEW, or CREATE › START FROM).
+        /// Doc 63 T1 (owner, 2026-11-21): it keeps everything, the cards its creator made too (shared "Your cards").
+        /// <see cref="templateId"/>: the made game or template a game was started from (a built-in game's StableId when
+        /// it was started from one).
         /// </summary>
         public bool isTemplate;
 

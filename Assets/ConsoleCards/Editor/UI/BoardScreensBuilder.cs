@@ -53,7 +53,7 @@ namespace ConsoleCards.Editor.UI
         {
             Prepare();
             int built = 0;
-            if (Rebuild("FE_Create", 1, BuildCreate)) built++;
+            if (Rebuild("FE_Create", 2, BuildCreate)) built++; // 2: START FROM in MAKE A GAME (doc 63 T1 (owner, 2026-11-21))
             if (Rebuild("FE_TopBar", 3, BuildTopBar)) built++; // 2: PROFILE-2, the avatar chip; 3: the switch list // boards 1–3 (BoardScreensBuilder.Flow.cs)
             if (Rebuild("FE_Profile", 1, BuildProfileBoard)) built++; // PROFILE-2: board 19
             if (Rebuild("FE_MainMenu", 3, BuildHome)) built++; // 2: BRAND-1, the logo as the title; 3: 540 x 270
@@ -139,10 +139,19 @@ namespace ConsoleCards.Editor.UI
             RectTransform icon = Box(make, "Icon", 54, 52, 64, 64, Cyan, null, 0f);
             Glyph(icon, "Plus", Ink, 30);
             TextAt(make, "Title", 140, 46, 520, 34, bold, 24, Words, TextAnchor.MiddleLeft, "MAKE A GAME");
-            Text body = TextAt(make, "Text", 140, 80, 520, 44, medium, 14, Soft, TextAnchor.UpperLeft,
-                "Lay out an empty table with any pieces, then save it as a game in four steps: Deck · Cards · Deal · Save.");
+            Text body = TextAt(make, "Text", 140, 78, 520, 44, medium, 14, Soft, TextAnchor.UpperLeft,
+                "Lay out a table and save it as a game. START FROM begins with a copy of a game or template; the original is not changed.");
             body.horizontalOverflow = HorizontalWrapMode.Wrap;
             TextAt(make, "Chevron", 670, 70, 30, 30, bold, 22, Cyan, TextAnchor.MiddleCenter, "›");
+            // Doc 63 T1 (owner, 2026-11-21): START FROM < source >; its buttons take their own clicks, the rest is MAKE A GAME.
+            RectTransform fromRow = Rect(make, "From", 140, 126, 520, 30);
+            Text fromHeading = TextAt(fromRow, "Heading", 0, 0, 96, 30, bold, 11, Muted, TextAnchor.MiddleLeft, "START FROM");
+            fromHeading.fontStyle = FontStyle.Bold;
+            SmallButton(fromRow, "Previous", 100, 0, 30, 30, "‹", Edge, Cyan);
+            RectTransform well = Box(fromRow, "Well", 134, 0, 300, 30, Well, Edge, 1f);
+            well.GetComponent<Image>().raycastTarget = false;
+            TextAt(fromRow, "Label", 134, 0, 300, 30, bold, 13, Words, TextAnchor.MiddleCenter, "Empty table");
+            SmallButton(fromRow, "Next", 438, 0, 30, 30, "›", Edge, Cyan);
 
             // The editors.
             RectTransform tiles = Rect(page, "Tiles", 48, 364, 720, 150);

@@ -19,7 +19,7 @@ namespace ConsoleCards.Editor.UI
     public static partial class TableHudBuilder
     {
         public const string MakeGamePath = Folder + "MakeGamePanel.prefab";
-        private const string MakeGameLabel = "MakeGameBoard13g"; // g: LAYOUT FOR a player count (doc 63 G2, 2026-11-21) // f: COVER PICTURE… (doc 63 G1, 2026-11-21) // e: SAVE AS TEMPLATE (RULES-SHEET R5) // d: four step helps // c: the RULES step (RULES-SHEET R2, 2026-11-20) // b: the done steps' tick
+        private const string MakeGameLabel = "MakeGameBoard13h"; // h: the template note keeps your cards (doc 63 T1 (owner, 2026-11-21)) // g: LAYOUT FOR a player count (doc 63 G2, 2026-11-21) // f: COVER PICTURE… (doc 63 G1, 2026-11-21) // e: SAVE AS TEMPLATE (RULES-SHEET R5) // d: four step helps // c: the RULES step (RULES-SHEET R2, 2026-11-20) // b: the done steps' tick
 
         private static readonly Color Teal13 = UiKit.Hex("138a8c");
         private static readonly Color Green13 = UiKit.Hex("2fd46b");
@@ -145,7 +145,7 @@ namespace ConsoleCards.Editor.UI
             Button saveAsNew = Pill13(details, "SaveAsNew", 284, 520, 256, 48, "SAVE AS NEW", Teal13, B.Words, out _);
             Button saveTemplate = B.SmallButton(details, "SaveTemplate", 20, 574, 200, 28, "SAVE AS TEMPLATE", B.Edge, B.Words);
             B.TextAt(details, "SaveNote", 230, 578, 310, 20, B.medium, 11, B.Faint, TextAnchor.MiddleLeft,
-                "Template: layout and rules sheet, no cards you made.");
+                "Template: the whole game, your cards too, to start new games from.");
 
             RectTransform stepSection = B.Rect(left, "Step", 0, 0, 560, 612);
             Text stepTitle = B.TextAt(stepSection, "Title", 20, 20, 520, 24, B.bold, 15, B.Words, TextAnchor.MiddleLeft, "1 · DECK");

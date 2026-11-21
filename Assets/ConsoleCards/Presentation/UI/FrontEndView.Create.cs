@@ -18,6 +18,9 @@ namespace ConsoleCards.Presentation.UI
         private void BindCreateButtons()
         {
             On("Pages/Create/MakeGame", () => actions?.MakeGame?.Invoke());
+            // Doc 63 T1 (owner, 2026-11-21): START FROM < > (an FE_Create built before it has none).
+            On("Pages/Create/MakeGame/From/Previous", () => actions?.CycleMakeGameFrom?.Invoke(-1));
+            On("Pages/Create/MakeGame/From/Next", () => actions?.CycleMakeGameFrom?.Invoke(1));
             On("Pages/Create/Tiles/CardStudio", () => actions?.OpenCardEditor?.Invoke());
             On("Pages/Create/Tiles/Decks", () => actions?.OpenDeckEditor?.Invoke());
             On("Pages/Create/Tiles/Table", () => actions?.OpenTableTools?.Invoke());
@@ -44,6 +47,7 @@ namespace ConsoleCards.Presentation.UI
         private void RenderCreate()
         {
             if (transform.Find(CreateGames) == null) return; // an FE_Create made before board 4
+            SetText("Pages/Create/MakeGame/From/Label", model.MakeGameFromText); // doc 63 T1
             int count = model.MyGames.Count;
             for (int i = 0; i < MyGameRowCount; i++)
             {

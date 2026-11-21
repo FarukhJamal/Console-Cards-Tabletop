@@ -88,7 +88,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             int players = EffectiveLayoutPlayers();
             model.LayoutText = players > 0 ? CountText(players, "player") : "All player counts";
-            model.CanClearLayout = players > 0 && activePlayerGame != null && activePlayerGame.LayoutFor(players) != null;
+            model.CanClearLayout = players > 0 && activePlayerGame != null && !activeIsDraft && activePlayerGame.LayoutFor(players) != null; // doc 63 T1
             List<int> counts = new List<int>();
             List<SavedCountLayout> layouts = activePlayerGame != null ? activePlayerGame.layouts : null;
             for (int i = 0; layouts != null && i < layouts.Count; i++)
@@ -111,7 +111,8 @@ namespace ConsoleCards.Presentation.Composition
             return $"{players} players fit best on the hexagon table: CREATE › TABLE.";
         }
 
-        // On SAVE: the game's layouts (the ones in its player range; a template strips the cards you made from each).
+        // On SAVE: the game's layouts (the ones in its player range; template true strips the cards you made from each;
+        // doc 63 T1 (owner, 2026-11-21): SAVE passes false, so a template keeps them).
         // With a count chosen, the table becomes that count's layout and the default stays as the game had it.
         internal bool ApplySaveLayout(PlayerGameFile game, bool template, out string problem)
         {

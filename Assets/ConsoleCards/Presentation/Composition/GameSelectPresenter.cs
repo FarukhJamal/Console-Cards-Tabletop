@@ -157,6 +157,7 @@ namespace ConsoleCards.Presentation.Composition
                     CopyMyGame = CopyMyGame,
                     RenameMyGame = RenameMyGame,
                     DeleteMyGame = DeleteMyGame,
+                    CycleMakeGameFrom = CycleMakeGameFrom, // doc 63 T1 (owner, 2026-11-21): START FROM
                 };
             }
 
@@ -549,7 +550,8 @@ namespace ConsoleCards.Presentation.Composition
 
         internal string CurrentGameEntryId(List<GameSelectEntry> entries)
         {
-            if (host.PlayerGamesPanel.activePlayerGame != null && host.activeSession != null && host.activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom)
+            if (host.PlayerGamesPanel.activePlayerGame != null && !host.PlayerGamesPanel.activeIsDraft // doc 63 T1: an unsaved copy is not listed
+                && host.activeSession != null && host.activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom)
             {
                 return PlayerGameEntryPrefix + host.PlayerGamesPanel.activePlayerGame.id;
             }
@@ -1097,6 +1099,8 @@ namespace ConsoleCards.Presentation.Composition
             string name = pendingDeckName;
             PlayerGameFile game = pendingPlayerGame;
             int gamePlayers = pendingPlayerGameCount;
+            bool draft = pendingDraft; // doc 63 T1
+            pendingDraft = false;
             pendingPlayerGameCount = 0;
             pendingDeckCards = null;
             pendingDeckName = string.Empty;
@@ -1104,6 +1108,7 @@ namespace ConsoleCards.Presentation.Composition
             host.PlayerGamesPanel.ResetGameDeck();
             // Doc 29: the table is a game you made only when it was started from one.
             host.PlayerGamesPanel.activePlayerGame = selection.Kind == TabletopSessionKind.EmptyCustom ? game : null;
+            host.PlayerGamesPanel.activeIsDraft = draft && host.PlayerGamesPanel.activePlayerGame != null; // doc 63 T1: START FROM
             host.PlayerGamesPanel.activeLayoutPlayers = 0;
             if (host.PlayerGamesPanel.activePlayerGame != null)
             {
