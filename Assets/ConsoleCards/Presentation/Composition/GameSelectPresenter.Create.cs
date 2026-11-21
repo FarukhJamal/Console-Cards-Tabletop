@@ -157,6 +157,7 @@ namespace ConsoleCards.Presentation.Composition
         /// <summary>After a table is made: MAKE A GAME or EDIT opens the save steps on it.</summary>
         internal void AfterTableReplaced()
         {
+            host.PlayerGamesPanel.EndTableTest(); // doc 63 M1 (owner, 2026-11-21): a new table ends a test
             if (!pendingOpenSave) return;
             pendingOpenSave = false;
             host.PlayerGamesPanel.OpenGameSave(true);

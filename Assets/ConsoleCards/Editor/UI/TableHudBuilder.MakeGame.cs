@@ -19,7 +19,8 @@ namespace ConsoleCards.Editor.UI
     public static partial class TableHudBuilder
     {
         public const string MakeGamePath = Folder + "MakeGamePanel.prefab";
-        private const string MakeGameLabel = "MakeGameBoard13h"; // h: the template note keeps your cards (doc 63 T1 (owner, 2026-11-21)) // g: LAYOUT FOR a player count (doc 63 G2, 2026-11-21) // f: COVER PICTURE… (doc 63 G1, 2026-11-21) // e: SAVE AS TEMPLATE (RULES-SHEET R5) // d: four step helps // c: the RULES step (RULES-SHEET R2, 2026-11-20) // b: the done steps' tick
+        public const string MakeGameTestBarPath = Folder + "MakeGameTestBar.prefab"; // doc 63 M1
+        private const string MakeGameLabel = "MakeGameBoard13i"; // i: a screen of its own, TEST ON TABLE (doc 63 M1 (owner, 2026-11-21)) // h: the template note keeps your cards (doc 63 T1 (owner, 2026-11-21)) // g: LAYOUT FOR a player count (doc 63 G2, 2026-11-21) // f: COVER PICTURE… (doc 63 G1, 2026-11-21) // e: SAVE AS TEMPLATE (RULES-SHEET R5) // d: four step helps // c: the RULES step (RULES-SHEET R2, 2026-11-20) // b: the done steps' tick
 
         private static readonly Color Teal13 = UiKit.Hex("138a8c");
         private static readonly Color Green13 = UiKit.Hex("2fd46b");
@@ -43,11 +44,55 @@ namespace ConsoleCards.Editor.UI
 
             AssignCatalogEntry(UiPrefabIds.GameSavePanel, AssetDatabase.LoadAssetAtPath<GameSavePanelView>(MakeGamePath),
                 UiLayer.Modal, UiRetention.CachedSingleInstance);
+
+            // Doc 63 M1 (owner, 2026-11-21): the BACK TO GAME SETUP bar shown on the table while testing.
+            if (!File.Exists(MakeGameTestBarPath))
+            {
+                B.Prepare();
+                Save<MakeGameTestBarView>(MakeGameTestBarPath, "MakeGameTestBar", BuildMakeGameTestBar);
+            }
+
+            AssignCatalogEntry(UiPrefabIds.MakeGameTestBar, AssetDatabase.LoadAssetAtPath<MakeGameTestBarView>(MakeGameTestBarPath),
+                UiLayer.Hud, UiRetention.CachedSingleInstance);
+        }
+
+        // Doc 63 M1: a small bar at the top centre (the HUD's strip is top left): what this is, and the way back.
+        private static void BuildMakeGameTestBar(RectTransform root, MakeGameTestBarView view)
+        {
+            RectTransform holder = Rect("Bar", root, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(0f, -18f * 1.5f), new Vector2(460f * 1.5f, 52f * 1.5f));
+            RectTransform plate = B.Box(holder, "Plate", 0, 0, 460, 52, B.Panel, Orange, 1f);
+            B.Stripe(plate, 12, 11, 8, 30);
+            B.TextAt(plate, "Title", 30, 8, 230, 18, B.bold, 12, B.Words, TextAnchor.MiddleLeft, "TESTING YOUR GAME");
+            B.TextAt(plate, "Note", 30, 27, 230, 16, B.medium, 10, B.Muted, TextAnchor.MiddleLeft,
+                "SAVE keeps the table as you leave it");
+            Button back = Pill13(plate, "Back", 270, 8, 182, 36, "BACK TO GAME SETUP", Teal13, B.Words, out _);
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("backButton").objectReferenceValue = back;
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static void BuildMakeGamePanel(RectTransform root, GameSavePanelView view)
         {
-            // The view closes on its overlay; here it is hidden (the steps keep the table live under the panels).
+            // Doc 63 M1 (owner, 2026-11-21): a screen of its own. The front end's dark dotted page covers the table (still
+            // there: SAVE captures it); a press on the page does nothing.
+            RectTransform page = Rect("Page", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            Image pageImage = page.gameObject.AddComponent<Image>();
+            pageImage.color = Page6;
+            pageImage.raycastTarget = true;
+            Sprite pageDots = HudSprite("HudDots", Vector4.zero);
+            if (pageDots != null)
+            {
+                Image dotImage = Rect("Dots", page, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero)
+                    .gameObject.AddComponent<Image>();
+                dotImage.sprite = pageDots;
+                dotImage.type = Image.Type.Tiled;
+                dotImage.color = Dots6;
+                dotImage.raycastTarget = false;
+            }
+
+            // The view closes on its overlay; here it is hidden (the page above takes the presses).
             Button dismiss = InvisibleButton(root, "DismissOverlay");
             dismiss.gameObject.SetActive(false);
 
@@ -89,8 +134,11 @@ namespace ConsoleCards.Editor.UI
                 if (i < 4) B.TextAt(bar, "Dash" + i, stepX[i] + stepW[i] + 2, 0, 24, 60, B.medium, 13, B.Faint, TextAnchor.MiddleCenter, "–");
             }
 
-            B.TextAt(bar, "Note", 800, 0, 364, 60, B.medium, 12, B.Muted, TextAnchor.MiddleRight,
-                "Steps in any order · the table stays live");
+            // Doc 63 M1: TEST ON TABLE lays the game out on the table to try it; BACK TO GAME SETUP comes back here.
+            Text note = B.TextAt(bar, "Note", 800, 0, 222, 60, B.medium, 11, B.Muted, TextAnchor.MiddleRight,
+                "Set up your game, then TEST ON TABLE to lay it out and try it");
+            note.horizontalOverflow = HorizontalWrapMode.Wrap;
+            Button testOnTable = B.SmallButton(bar, "TestOnTable", 1030, 12, 132, 36, "TEST ON TABLE", B.Cyan, B.Cyan);
             Button exit = B.SmallButton(bar, "Exit", 1170, 12, 57, 36, "EXIT", B.Edge, B.Words);
 
             // ---------- the left panel: a step, or the details on SAVE ----------
@@ -264,6 +312,7 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("layoutLabel").objectReferenceValue = layoutLabel;
             so.FindProperty("nextLayoutButton").objectReferenceValue = nextLayout;
             so.FindProperty("clearLayoutButton").objectReferenceValue = clearLayout;
+            so.FindProperty("testOnTableButton").objectReferenceValue = testOnTable; // doc 63 M1
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

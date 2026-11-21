@@ -102,7 +102,17 @@ namespace ConsoleCards.Presentation.Composition
         // (MAKE A GAME or EDIT) goes back to CREATE when it is closed, instead of leaving you on the empty table.
         internal bool closeGameSaveToCreate;
 
-        internal void OpenGameSave() => OpenGameSave(false);
+        internal void OpenGameSave()
+        {
+            // Doc 63 M1 (owner, 2026-11-21): while testing, the game menu's row goes back to the setup as it was.
+            if (testingOnTable)
+            {
+                BackToGameSetup();
+                return;
+            }
+
+            OpenGameSave(false);
+        }
 
         internal void OpenGameSave(bool fromCreate)
         {
@@ -127,6 +137,7 @@ namespace ConsoleCards.Presentation.Composition
         internal void ShowGameSave(string status)
         {
             if (host.runtimeUi == null || host.matchState == null) return;
+            EndTableTest(); // doc 63 M1 (owner, 2026-11-21): the panel is back, the test bar goes
             if (gameSaveActions == null)
             {
                 gameSaveActions = new GameSaveActions
@@ -144,6 +155,7 @@ namespace ConsoleCards.Presentation.Composition
                     ChoosePicture = ChooseSaveCover, // doc 63 G1
                     CycleLayout = CycleSaveLayout, // doc 63 G2
                     ClearLayout = ClearSaveLayout,
+                    TestOnTable = TestOnTable, // doc 63 M1
                 };
             }
 

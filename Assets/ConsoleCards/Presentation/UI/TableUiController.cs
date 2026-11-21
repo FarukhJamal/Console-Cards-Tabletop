@@ -1624,6 +1624,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(gameSelectPanelView);
             ReleaseView(frontEndView);
             ReleaseView(gameSavePanelView);
+            ReleaseView(makeGameTestBarView); // doc 63 M1
             ReleaseView(rulesSheetPanelView);
             ReleaseView(tablePanelView);
             ReleaseView(hintStripView);

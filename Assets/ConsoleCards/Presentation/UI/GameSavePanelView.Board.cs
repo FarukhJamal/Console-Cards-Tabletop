@@ -46,6 +46,8 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Text layoutLabel;
         [SerializeField] private Button nextLayoutButton;
         [SerializeField] private Button clearLayoutButton;
+        [Tooltip("Optional (doc 63 M1): TEST ON TABLE in the top bar.")]
+        [SerializeField] private Button testOnTableButton;
 
         private static readonly string[] BoardStepNames = { "DECK", "CARDS", "DEAL", "RULES", "SAVE" };
 
@@ -86,6 +88,13 @@ namespace ConsoleCards.Presentation.UI
             }
 
             BindLayout(model); // doc 63 G2
+            if (testOnTableButton != null)
+            {
+                // Doc 63 M1 (owner, 2026-11-21): try the game on the live table; the panel keeps what was typed.
+                testOnTableButton.onClick.RemoveAllListeners();
+                testOnTableButton.onClick.AddListener(() => actions?.TestOnTable?.Invoke(Typed()));
+                testOnTableButton.gameObject.SetActive(actions?.TestOnTable != null);
+            }
 
             if (boardSteps && backButton != null && model.Step == GameSaveModel.SaveStep) backButton.gameObject.SetActive(false);
             ShowSavedRows(model);
@@ -125,6 +134,7 @@ namespace ConsoleCards.Presentation.UI
             Clear(previousLayoutButton);
             Clear(nextLayoutButton);
             Clear(clearLayoutButton);
+            Clear(testOnTableButton); // doc 63 M1
             if (newRuleInput != null) newRuleInput.onEndEdit.RemoveAllListeners();
             if (nameInput != null) nameInput.onValueChanged.RemoveListener(NameTyped);
             for (int i = 0; i < ruleRowPool.Count; i++) ruleRowPool[i].Unbind();

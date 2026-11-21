@@ -103,6 +103,9 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>Doc 63 G2: LAYOUT FOR ‹ › (the next (+1) or previous (-1) count) and CLEAR (that count's layout).</summary>
         public Action<int, GameSaveTyped> CycleLayout;
         public Action<GameSaveTyped> ClearLayout;
+
+        /// <summary>Doc 63 M1 (owner, 2026-11-21): TEST ON TABLE hides the panel and shows the live table.</summary>
+        public Action<GameSaveTyped> TestOnTable;
     }
 
     /// <summary>
