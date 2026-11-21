@@ -74,6 +74,7 @@ namespace ConsoleCards.Presentation.Composition
             writer.Write(grid.SpaceDepth);
             writer.Write(grid.Gap);
             writer.Write(grid.Frame);
+            writer.Write(grid.Hex); // doc 62
         }
 
         private static byte[] GridPayload(BoardGrid grid)
@@ -87,6 +88,7 @@ namespace ConsoleCards.Presentation.Composition
                 payload.Write(grid.SpaceDepth);
                 payload.Write(grid.Gap);
                 payload.Write(grid.Frame);
+                payload.Write(grid.Hex); // doc 62
                 payload.Flush();
                 return stream.ToArray();
             }
@@ -106,10 +108,11 @@ namespace ConsoleCards.Presentation.Composition
                     float depth = reader.ReadSingle();
                     float gap = reader.ReadSingle();
                     float frame = reader.ReadSingle();
+                    bool hex = reader.BaseStream.Position < reader.BaseStream.Length && reader.ReadBoolean(); // doc 62
                     if (columns < 1 || rows < 1 || columns > BoardGrid.MaximumColumns || rows > BoardGrid.MaximumRows) return false;
                     if (!(width > 0f) || !(depth > 0f) || float.IsInfinity(width) || float.IsInfinity(depth)
                         || float.IsNaN(gap) || float.IsInfinity(gap) || float.IsNaN(frame) || float.IsInfinity(frame)) return false;
-                    grid = new BoardGrid(columns, rows, width, depth, Mathf.Max(0f, gap), Mathf.Max(0f, frame));
+                    grid = new BoardGrid(columns, rows, width, depth, Mathf.Max(0f, gap), Mathf.Max(0f, frame), hex);
                     return grid.IsValid;
                 }
             }

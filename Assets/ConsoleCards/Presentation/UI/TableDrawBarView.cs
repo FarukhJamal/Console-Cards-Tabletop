@@ -9,7 +9,8 @@ namespace ConsoleCards.Presentation.UI
     /// the left of the rail, level with the Draw icon, while Draw is chosen: TOOL (pen N, highlighter K, label O,
     /// eraser X; I opens and closes it) | LINE (plain, dashed, dotted, wavy, brush, swirl) | SIZE (thin, medium, thick) | COLOUR (your seat's
     /// colour first) | Undo, CLEAR (asks again in place: CLEAR ALL?) and ✕ (back to Select). Under it one line of keys,
-    /// and the label's words box while the label tool is chosen. Built by Console Cards > UI > Create Missing Table HUD.
+    /// the label's words box while the label tool is chosen, or (doc 62, owner 2026-11-21) the shapes while the shape
+    /// tool (J) is chosen. Built by Console Cards > UI > Create Missing Table HUD.
     /// </summary>
     public sealed class TableDrawBarView : MonoBehaviour
     {
@@ -30,6 +31,9 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button closeButton;
         [SerializeField] private GameObject keysLine;
         [SerializeField] private InputField labelInput;
+        [SerializeField] private GameObject shapesLine;
+        [SerializeField] private Button[] shapeButtons = new Button[0];
+        [SerializeField] private Image[] shapeFills = new Image[0];
 
         [Header("Colours")]
         [SerializeField] private Color onFill = new Color(0.110f, 0.235f, 0.239f, 1f);
@@ -45,6 +49,7 @@ namespace ConsoleCards.Presentation.UI
         private Action undo;
         private Action clear;
         private Action close;
+        private Action<int> chooseShape;
         private bool bound;
 
         public bool IsComplete => barRoot != null
@@ -62,8 +67,9 @@ namespace ConsoleCards.Presentation.UI
         public string LabelText => labelInput != null ? labelInput.text : string.Empty;
 
         public void Bind(Action<int> mode, Action<int> style, Action<int> size, Action<int> colour, Action undoLine,
-            Action clearAll, Action closeBar)
+            Action clearAll, Action closeBar, Action<int> shape = null)
         {
+            chooseShape = shape;
             chooseMode = mode;
             chooseStyle = style;
             chooseSize = size;
@@ -77,6 +83,7 @@ namespace ConsoleCards.Presentation.UI
             Listen(styleButtons, i => chooseStyle?.Invoke(i));
             Listen(sizeButtons, i => chooseSize?.Invoke(i));
             Listen(swatchButtons, i => chooseColour?.Invoke(i));
+            if (shapeButtons != null) Listen(shapeButtons, i => chooseShape?.Invoke(i));
             if (undoButton != null) undoButton.onClick.AddListener(() => undo?.Invoke());
             clearButton.onClick.AddListener(() => clear?.Invoke());
             closeButton.onClick.AddListener(() => close?.Invoke());
@@ -97,16 +104,26 @@ namespace ConsoleCards.Presentation.UI
             if (barRoot != null && barRoot.activeSelf != shown) barRoot.SetActive(shown);
             if (keysLine != null && keysLine.activeSelf != shown) keysLine.SetActive(shown);
             if (!shown && labelInput != null && labelInput.gameObject.activeSelf) labelInput.gameObject.SetActive(false);
+            if (!shown && shapesLine != null && shapesLine.activeSelf) shapesLine.SetActive(false);
         }
 
-        /// <summary>Lights the tool (0 pen, 1 highlighter, 2 label, 3 eraser); the words box shows for labels.</summary>
+        /// <summary>
+        /// Lights the tool (0 pen, 1 highlighter, 2 label, 3 eraser, 4 shape); the words box shows for labels and the
+        /// shapes for the shape tool, in place of the keys.
+        /// </summary>
         public void SetMode(int mode)
         {
             Light(modeFills, mode);
             bool label = mode == 2 && IsShown;
+            bool shape = mode == 4 && IsShown && shapesLine != null;
             if (labelInput != null && labelInput.gameObject.activeSelf != label) labelInput.gameObject.SetActive(label);
-            if (keysLine != null && IsShown && keysLine.activeSelf == label) keysLine.SetActive(!label);
+            if (shapesLine != null && shapesLine.activeSelf != shape) shapesLine.SetActive(shape);
+            bool keys = !label && !shape;
+            if (keysLine != null && IsShown && keysLine.activeSelf != keys) keysLine.SetActive(keys);
         }
+
+        /// <summary>Doc 62: lights the shape (0 square, 1 rectangle, 2 circle, 3 hexagon, 4 hex grid).</summary>
+        public void SetShape(int shape) => Light(shapeFills, shape);
 
         public void SetStyle(int index) => Light(styleFills, index);
 

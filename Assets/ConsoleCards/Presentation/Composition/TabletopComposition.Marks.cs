@@ -157,6 +157,16 @@ namespace ConsoleCards.Presentation.Composition
         private const int DrawModeHighlighter = 1;
         private const int DrawModeLabel = 2;
         private const int DrawModeEraser = 3;
+        private const int DrawModeShape = 4; // doc 62 (owner, 2026-11-21): squares, rectangles, circles, hexagons
+        private const int ShapeSquare = 0;
+        private const int ShapeRectangle = 1;
+        private const int ShapeCircle = 2;
+        private const int ShapeHexagon = 3;
+        private const int ShapeHexGrid = 4;
+        private const int ShapeCount = 5;
+        private const int CircleSegments = 48;
+        private const int MaximumHexGridSpaces = 150;
+        private static readonly float[] HexGridSizes = { 0.5f, 0.75f, 1f }; // a hexagon's centre to point, per SIZE
         private const int MaximumTableMarks = 400;
         private const int MaximumStrokePoints = 1024;
         private const float StrokePointSpacing = 0.04f; // table units between two points of a line
@@ -219,6 +229,8 @@ namespace ConsoleCards.Presentation.Composition
         private bool markSetLooked;
         private GameObject markRoot;
         private int drawMode = DrawModePen;
+        private int drawShape = ShapeHexagon;
+        private Vector3 shapeAnchor;
         private int drawColour;
         private int drawSize = 1;
         private float clearAskedAt = -100f;
@@ -289,7 +301,7 @@ namespace ConsoleCards.Presentation.Composition
             if (hud != null)
             {
                 hud.Bind(ChooseDrawMode, ChooseBarStyle, ChooseDrawSize, ChooseDrawColour, UndoDrawLine, PressDrawClear,
-                    CloseDrawBar);
+                    CloseDrawBar, ChooseDrawShape);
                 if (bar != null && bar.HasDrawPanel) bar.ShowDraw(false); // the HUD's bar stands in for it
                 ShowDrawPanel(activeTool == TableToolKind.Draw);
                 return;
@@ -313,6 +325,7 @@ namespace ConsoleCards.Presentation.Composition
                 }
 
                 hud.SetMode(drawMode);
+                hud.SetShape(drawShape);
                 hud.SetStyle(Array.IndexOf(BarStyleOrder, drawStyle));
                 hud.SetSize(drawSize);
                 int hudCount = Mathf.Min(drawSwatches.Length, HudDrawPalette.Length);
@@ -337,12 +350,34 @@ namespace ConsoleCards.Presentation.Composition
 
         private void ChooseDrawMode(int mode)
         {
-            if (mode < DrawModePen || mode > DrawModeEraser) return;
+            if (mode < DrawModePen || mode > DrawModeShape) return;
             CancelDraw();
             drawMode = mode;
             ShowDrawPanel(true);
             RefreshToolBarState();
             if (mode == DrawModeLabel) ShowMessage("Type the label's words in the box, then click the table where it goes.");
+            if (mode == DrawModeShape) ShowShapeHint();
+        }
+
+        // Doc 62: a shape button under the bar (square, rectangle, circle, hexagon, hex grid); it picks the shape tool.
+        private void ChooseDrawShape(int shape)
+        {
+            if (shape < 0 || shape >= ShapeCount) return;
+            CancelDraw();
+            drawShape = shape;
+            drawMode = DrawModeShape;
+            ShowDrawPanel(true);
+            RefreshToolBarState();
+            ShowShapeHint();
+        }
+
+        private void ShowShapeHint()
+        {
+            ShowMessage(drawShape == ShapeHexGrid
+                ? "Drag across the area to fill it with hexagons (SIZE sets how big they are)."
+                : drawShape == ShapeRectangle
+                    ? "Drag from one corner to the other."
+                    : "Drag from the centre out to the size you want.");
         }
 
         private void ChooseDrawColour(int colour)
@@ -437,6 +472,7 @@ namespace ConsoleCards.Presentation.Composition
             else if (keyboard.kKey.wasPressedThisFrame) ChooseDrawMode(DrawModeHighlighter);
             else if (keyboard.oKey.wasPressedThisFrame) ChooseDrawMode(DrawModeLabel);
             else if (keyboard.xKey.wasPressedThisFrame) ChooseDrawMode(DrawModeEraser);
+            else if (keyboard.jKey.wasPressedThisFrame) ChooseDrawMode(DrawModeShape); // doc 62
             else return false;
             return true;
         }
@@ -540,6 +576,12 @@ namespace ConsoleCards.Presentation.Composition
             bool highlighter = drawMode == DrawModeHighlighter;
             float unit = MarkUnit();
             point += normal * ((highlighter ? HighlighterLift : PenLift) * unit);
+            if (drawMode == DrawModeShape)
+            {
+                AddShapePoint(point);
+                return;
+            }
+
             if (strokeCount > 0 && Keys.ActionModifierHeld)
             {
                 // Shift held (owner, 2026-10-20): a straight line from where the line started to the pointer.
@@ -573,6 +615,145 @@ namespace ConsoleCards.Presentation.Composition
             strokeCount++;
             ShowStroke(strokeLine, strokePoints, strokeCount, drawStyle, strokeWidth, false);
             SendLiveStroke(false);
+        }
+
+        // ---------- Shapes (doc 62) ----------
+
+        // The first point is where the shape starts (its centre, or a corner); each move draws the whole shape again,
+        // flat at that height, along the table's own directions. A hex grid shows the area it will fill.
+        private void AddShapePoint(Vector3 point)
+        {
+            if (strokeLine == null)
+            {
+                shapeAnchor = point;
+                strokeWidth = LineWidth(TableMarkKind.Pen);
+                strokeLine = NewMarkLine(TableMarkKind.Pen, CurrentDrawColour(TableMarkKind.Pen), strokeWidth, drawStyle);
+                strokeShownCount = 0;
+                liveStrokeSerial++;
+                liveStrokeSent = 0;
+                liveStrokeSentAt = -1f;
+                strokeCount = 0;
+                if (strokeLine == null) strokeActive = false;
+                return;
+            }
+
+            float dx = point.x - shapeAnchor.x;
+            float dz = point.z - shapeAnchor.z;
+            float spacing = StrokePointSpacing * MarkUnit();
+            if ((dx * dx) + (dz * dz) < spacing * spacing)
+            {
+                strokeCount = 0; // too small to keep yet
+                strokeLine.positionCount = 0;
+                return;
+            }
+
+            strokeCount = BuildShape(drawShape == ShapeHexGrid ? ShapeRectangle : drawShape, shapeAnchor, dx, dz, strokePoints, 0);
+            ShowStroke(strokeLine, strokePoints, strokeCount, drawStyle, strokeWidth, true);
+            liveStrokeSent = 0; // every point moved: all of them go again
+            SendLiveStroke(false);
+        }
+
+        // Writes one closed outline into points from start on; returns how many points it took.
+        private static int BuildShape(int shape, Vector3 anchor, float dx, float dz, Vector3[] points, int start)
+        {
+            int n = start;
+            float y = anchor.y;
+            switch (shape)
+            {
+                case ShapeRectangle:
+                    points[n++] = anchor;
+                    points[n++] = new Vector3(anchor.x + dx, y, anchor.z);
+                    points[n++] = new Vector3(anchor.x + dx, y, anchor.z + dz);
+                    points[n++] = new Vector3(anchor.x, y, anchor.z + dz);
+                    points[n++] = anchor;
+                    break;
+                case ShapeSquare:
+                {
+                    float half = Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dz));
+                    points[n++] = new Vector3(anchor.x - half, y, anchor.z - half);
+                    points[n++] = new Vector3(anchor.x + half, y, anchor.z - half);
+                    points[n++] = new Vector3(anchor.x + half, y, anchor.z + half);
+                    points[n++] = new Vector3(anchor.x - half, y, anchor.z + half);
+                    points[n++] = points[start];
+                    break;
+                }
+                case ShapeCircle:
+                {
+                    float radius = Mathf.Sqrt((dx * dx) + (dz * dz));
+                    for (int i = 0; i <= CircleSegments; i++)
+                    {
+                        float angle = 2f * Mathf.PI * i / CircleSegments;
+                        points[n++] = new Vector3(anchor.x + (radius * Mathf.Cos(angle)), y, anchor.z + (radius * Mathf.Sin(angle)));
+                    }
+
+                    break;
+                }
+                default:
+                    n = BuildHexagon(anchor, Mathf.Sqrt((dx * dx) + (dz * dz)), points, start);
+                    break;
+            }
+
+            return n - start;
+        }
+
+        // A hexagon with its points to the near and far sides (like a hexagon board's spaces); returns the end index.
+        private static int BuildHexagon(Vector3 centre, float radius, Vector3[] points, int start)
+        {
+            int n = start;
+            for (int i = 0; i <= 6; i++)
+            {
+                float angle = (Mathf.PI * 0.5f) - (i * Mathf.PI / 3f);
+                points[n++] = new Vector3(centre.x + (radius * Mathf.Cos(angle)), centre.y, centre.z + (radius * Mathf.Sin(angle)));
+            }
+
+            return n;
+        }
+
+        // Doc 62: the area dragged becomes hexagons, rows shifted half a hexagon, each its own drawing (erased one by
+        // one) and all of them one Undo step. False when none fit.
+        private bool FinishHexGrid(Color colour)
+        {
+            float radius = HexGridSizes[Mathf.Clamp(drawSize, 0, HexGridSizes.Length - 1)] * MarkUnit();
+            float width = radius * 1.7320508f;
+            float pitchZ = radius * 1.5f;
+            Vector3 corner = strokePoints[2]; // the rectangle's far corner
+            float minX = Mathf.Min(shapeAnchor.x, corner.x);
+            float maxX = Mathf.Max(shapeAnchor.x, corner.x);
+            float minZ = Mathf.Min(shapeAnchor.z, corner.z);
+            float maxZ = Mathf.Max(shapeAnchor.z, corner.z);
+            int room = Mathf.Min(MaximumHexGridSpaces, MaximumTableMarks - tableMarks.Count);
+            int made = 0;
+            List<TableMark> hexes = new List<TableMark>();
+            int row = 0;
+            for (float z = minZ + radius; z <= maxZ - radius + 1e-4f && made < room; z += pitchZ, row++)
+            {
+                for (float x = minX + (width * ((row & 1) == 1 ? 1f : 0.5f)); x <= maxX - (width * 0.5f) + 1e-4f && made < room; x += width)
+                {
+                    Vector3[] points = new Vector3[7];
+                    BuildHexagon(new Vector3(x, shapeAnchor.y, z), radius, points, 0);
+                    hexes.Add(new TableMark(TableMarkKind.Pen, colour, strokeWidth, points, null, 0f, drawStyle));
+                    made++;
+                }
+            }
+
+            if (made == 0) return false;
+            for (int i = 0; i < hexes.Count; i++)
+            {
+                GameObject shown = NewMarkObject(hexes[i]);
+                if (shown == null) continue;
+                tableMarks = tableMarks.With(hexes[i]);
+                shownMarks.Add(hexes[i]);
+                shownMarkObjects.Add(shown);
+            }
+
+            if (made >= room)
+            {
+                ShowMessage(room < MaximumHexGridSpaces
+                    ? $"The table holds up to {MaximumTableMarks} drawings: the grid stops at {made} hexagons."
+                    : $"A hex grid holds up to {MaximumHexGridSpaces} hexagons: drag again for more.");
+            }
+
+            return true;
         }
 
         // SYNC-1: the points not sent yet, at most a few times a second (all of them when <paramref name="now"/>).
@@ -734,6 +915,12 @@ namespace ConsoleCards.Presentation.Composition
         private void FinishStroke()
         {
             strokeActive = false;
+            if (drawMode == DrawModeShape)
+            {
+                FinishShape();
+                return;
+            }
+
             if (strokeLine == null || strokeCount == 0)
             {
                 if (strokeLine != null) Destroy(strokeLine.gameObject);
@@ -762,6 +949,52 @@ namespace ConsoleCards.Presentation.Composition
             strokeLine = null;
             strokeCount = 0;
             SessionService.RecordTableMarkStep(highlighter ? "highlighted on the table" : "drew a line");
+        }
+
+        // Doc 62: a shape is kept like a line (a pen drawing, one Undo step); a hex grid becomes its hexagons. A click
+        // without dragging leaves nothing.
+        private void FinishShape()
+        {
+            bool grid = drawShape == ShapeHexGrid;
+            if (strokeLine == null || strokeCount < 2)
+            {
+                if (strokeLine != null)
+                {
+                    if (IsOnlineTable) online.SendStrokeEnd(localPlayerId, liveStrokeSerial, false);
+                    Destroy(strokeLine.gameObject);
+                }
+
+                strokeLine = null;
+                strokeCount = 0;
+                return;
+            }
+
+            if (grid)
+            {
+                if (IsOnlineTable) online.SendStrokeEnd(localPlayerId, liveStrokeSerial, false); // the area outline goes
+                Color colour = strokeLine.startColor;
+                Destroy(strokeLine.gameObject);
+                strokeLine = null;
+                bool made = FinishHexGrid(colour);
+                strokeCount = 0;
+                if (made) SessionService.RecordTableMarkStep("drew a hex grid");
+                else ShowMessage("Drag a bigger area for the hex grid (or pick a smaller SIZE).");
+                return;
+            }
+
+            SendLiveStroke(true);
+            if (IsOnlineTable) online.SendStrokeEnd(localPlayerId, liveStrokeSerial, true);
+            Vector3[] points = new Vector3[strokeCount];
+            Array.Copy(strokePoints, points, strokeCount);
+            TableMark mark = new TableMark(TableMarkKind.Pen, strokeLine.startColor, strokeWidth, points, null, 0f, drawStyle);
+            tableMarks = tableMarks.With(mark);
+            shownMarks.Add(mark);
+            shownMarkObjects.Add(strokeLine.gameObject);
+            strokeLine = null;
+            strokeCount = 0;
+            SessionService.RecordTableMarkStep(drawShape == ShapeCircle ? "drew a circle"
+                : drawShape == ShapeHexagon ? "drew a hexagon"
+                : drawShape == ShapeSquare ? "drew a square" : "drew a rectangle");
         }
 
         // ---------- Labels ----------

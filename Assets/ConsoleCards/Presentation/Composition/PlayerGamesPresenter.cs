@@ -787,6 +787,7 @@ namespace ConsoleCards.Presentation.Composition
                     spaceDepth = board.Grid.SpaceDepth,
                     gap = board.Grid.Gap,
                     frame = board.Grid.Frame,
+                    hex = board.Grid.Hex,
                     pose = SavePose(board.Pose),
                 });
             }
@@ -818,7 +819,7 @@ namespace ConsoleCards.Presentation.Composition
                 BoardGrid grid = new BoardGrid(
                     Mathf.Clamp(board.columns, 1, BoardGrid.MaximumColumns),
                     Mathf.Clamp(board.rows, 1, BoardGrid.MaximumRows),
-                    board.spaceWidth, board.spaceDepth, board.gap, board.frame);
+                    board.spaceWidth, board.spaceDepth, board.gap, board.frame, board.hex);
                 if (!grid.IsValid || !host.CommitBoardCreate(LoadPose(board.pose), grid, false)) failed++;
             }
 

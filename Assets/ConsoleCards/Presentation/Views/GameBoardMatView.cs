@@ -37,6 +37,15 @@ namespace ConsoleCards.Presentation.Views
         private Material outlineMaterial;
         private readonly List<Transform> outlineSpaces = new List<Transform>();
 
+        // Doc 62 (owner, 2026-11-21): hexagon spaces, made from two flat hexagon meshes (edge and fill, like the
+        // authored space) or, over a playmat picture, a thin hexagon ring. Kept and reused like the other spaces.
+        private const float HexFillShare = 0.88f;
+        private readonly List<GameObject> hexSpaces = new List<GameObject>();
+        private readonly List<GameObject> hexOutlines = new List<GameObject>();
+        private Mesh hexMesh;
+        private Mesh hexRingMesh;
+        private float hexRingDepth = -1f;
+
         public BoardGrid Grid { get; private set; }
         public bool HasGrid => hasGrid;
         public float Thickness => thickness;
@@ -60,6 +69,8 @@ namespace ConsoleCards.Presentation.Views
             spaceTemplate.SetActive(false);
             BoardGrid grid = Grid;
             int count = grid.Columns * grid.Rows;
+            LayOutHexSpaces(grid.Hex ? count : 0);
+            if (grid.Hex) count = 0; // the rectangle spaces all hide
             bool outlines = picture != null;
             while (!outlines && spaces.Count < count)
             {
@@ -94,8 +105,155 @@ namespace ConsoleCards.Presentation.Views
             }
         }
 
+        // Doc 62: the hexagon spaces for <paramref name="count"/> spaces (0: none shown).
+        private void LayOutHexSpaces(int count)
+        {
+            BoardGrid grid = Grid;
+            bool outlines = picture != null;
+            int solid = outlines ? 0 : count;
+            int rings = outlines ? count : 0;
+            if (solid > 0 && hexMesh == null) hexMesh = HexMesh(0f);
+            if (rings > 0 && !Mathf.Approximately(hexRingDepth, grid.SpaceDepth))
+            {
+                if (hexRingMesh != null) Destroy(hexRingMesh);
+                hexRingDepth = grid.SpaceDepth;
+                hexRingMesh = HexMesh(Mathf.Clamp01(1f - (2f * PictureOutlineWidth / Mathf.Max(0.01f, grid.SpaceDepth))));
+            }
+
+            while (hexSpaces.Count < solid) hexSpaces.Add(CreateHexSpace());
+            while (hexOutlines.Count < rings) hexOutlines.Add(CreateHexOutline());
+            PlaceHexes(hexSpaces, solid, thickness + 0.001f);
+            PlaceHexes(hexOutlines, rings, thickness + 0.0015f);
+        }
+
+        private void PlaceHexes(List<GameObject> hexes, int count, float height)
+        {
+            BoardGrid grid = Grid;
+            for (int i = 0; i < hexes.Count; i++)
+            {
+                GameObject hex = hexes[i];
+                bool used = i < count;
+                if (hex.activeSelf != used) hex.SetActive(used);
+                if (!used) continue;
+                grid.SpaceCentre(i % grid.Columns, i / grid.Columns, out float x, out float z);
+                hex.transform.localPosition = new Vector3(x, height, z);
+                hex.transform.localRotation = Quaternion.identity;
+                hex.transform.localScale = new Vector3(grid.CellWidth, 1f, grid.SpaceDepth);
+            }
+        }
+
+        // A hexagon space: the edge colour over the whole hexagon, the fill colour a little smaller on top.
+        private GameObject CreateHexSpace()
+        {
+            Renderer edge = FindSpaceRenderer("Edge");
+            Renderer fill = FindSpaceRenderer("Fill");
+            Material edgeMaterial = edge != null ? edge.sharedMaterial : frame.GetComponent<Renderer>().sharedMaterial;
+            GameObject root = new GameObject("Hex Space");
+            root.transform.SetParent(spacesRoot, false);
+            AddHexPart(root.transform, "Edge", hexMesh, edgeMaterial, 0f, 1f);
+            AddHexPart(root.transform, "Fill", hexMesh, fill != null ? fill.sharedMaterial : edgeMaterial, 0.0005f, HexFillShare);
+            return root;
+        }
+
+        private GameObject CreateHexOutline()
+        {
+            EnsureOutlineMaterial();
+            GameObject root = new GameObject("Hex Space Outline");
+            root.transform.SetParent(spacesRoot, false);
+            AddHexPart(root.transform, "Ring", hexRingMesh, outlineMaterial, 0f, 1f);
+            return root;
+        }
+
+        private void AddHexPart(Transform parent, string name, Mesh mesh, Material material, float lift, float share)
+        {
+            GameObject part = new GameObject(name);
+            part.transform.SetParent(parent, false);
+            part.transform.localPosition = new Vector3(0f, lift, 0f);
+            part.transform.localScale = new Vector3(share, 1f, share);
+            part.AddComponent<MeshFilter>().sharedMesh = mesh;
+            MeshRenderer renderer = part.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
+
+        // A flat hexagon 1 wide (flat side to flat side) and 1 deep (point to point), facing up; with an inner share
+        // above 0 only the ring between the outline and that smaller hexagon.
+        private static Mesh HexMesh(float inner)
+        {
+            Vector3[] outline =
+            {
+                new Vector3(0f, 0f, 0.5f), new Vector3(0.5f, 0f, 0.25f), new Vector3(0.5f, 0f, -0.25f),
+                new Vector3(0f, 0f, -0.5f), new Vector3(-0.5f, 0f, -0.25f), new Vector3(-0.5f, 0f, 0.25f),
+            };
+            Mesh mesh = new Mesh { name = inner > 0f ? "Hex Ring" : "Hex" };
+            Vector3[] vertices;
+            int[] triangles;
+            if (inner <= 0f)
+            {
+                vertices = new Vector3[7];
+                triangles = new int[18];
+                for (int i = 0; i < 6; i++)
+                {
+                    vertices[i + 1] = outline[i];
+                    triangles[(i * 3) + 1] = i + 1; // clockwise seen from above: the face looks up
+                    triangles[(i * 3) + 2] = ((i + 1) % 6) + 1;
+                }
+            }
+            else
+            {
+                vertices = new Vector3[12];
+                triangles = new int[36];
+                for (int i = 0; i < 6; i++)
+                {
+                    vertices[i] = outline[i];
+                    vertices[i + 6] = outline[i] * inner;
+                }
+
+                for (int i = 0; i < 6; i++)
+                {
+                    int next = (i + 1) % 6;
+                    int t = i * 6;
+                    triangles[t] = i;
+                    triangles[t + 1] = next;
+                    triangles[t + 2] = next + 6;
+                    triangles[t + 3] = i;
+                    triangles[t + 4] = next + 6;
+                    triangles[t + 5] = i + 6;
+                }
+            }
+
+            Vector3[] normals = new Vector3[vertices.Length];
+            Vector2[] uvs = new Vector2[vertices.Length];
+            for (int i = 0; i < vertices.Length; i++)
+            {
+                normals[i] = Vector3.up;
+                uvs[i] = new Vector2(vertices[i].x + 0.5f, vertices[i].z + 0.5f);
+            }
+
+            mesh.vertices = vertices;
+            mesh.normals = normals;
+            mesh.uv = uvs;
+            mesh.triangles = triangles;
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
         // One space outline: four thin bars round the space (near, far, left, right).
         private Transform CreateOutlineSpace()
+        {
+            EnsureOutlineMaterial();
+            Transform root = new GameObject("Space Outline").transform;
+            root.SetParent(spacesRoot, false);
+            for (int side = 0; side < 4; side++)
+            {
+                Transform bar = CreateFlatQuad($"Bar {side}", outlineMaterial).transform;
+                bar.SetParent(root, false);
+            }
+
+            return root;
+        }
+
+        private void EnsureOutlineMaterial()
         {
             if (outlineMaterial == null)
             {
@@ -111,16 +269,6 @@ namespace ConsoleCards.Presentation.Views
                     outlineMaterial.SetColor("_EmissionColor", PictureOutlineColour * 0.6f);
                 }
             }
-
-            Transform root = new GameObject("Space Outline").transform;
-            root.SetParent(spacesRoot, false);
-            for (int side = 0; side < 4; side++)
-            {
-                Transform bar = CreateFlatQuad($"Bar {side}", outlineMaterial).transform;
-                bar.SetParent(root, false);
-            }
-
-            return root;
         }
 
         private static void LayOutOutline(Transform outline, float width, float depth)
@@ -209,6 +357,8 @@ namespace ConsoleCards.Presentation.Views
         {
             if (pictureMaterial != null) Destroy(pictureMaterial);
             if (outlineMaterial != null) Destroy(outlineMaterial);
+            if (hexMesh != null) Destroy(hexMesh);
+            if (hexRingMesh != null) Destroy(hexRingMesh);
         }
 
         /// <summary>

@@ -223,6 +223,7 @@ namespace ConsoleCards.Presentation.Saving
         public float spaceDepth;
         public float gap;
         public float frame;
+        public bool hex; // doc 62: hexagon spaces (older files: false, squares)
         public SavedPose pose = new SavedPose();
     }
 

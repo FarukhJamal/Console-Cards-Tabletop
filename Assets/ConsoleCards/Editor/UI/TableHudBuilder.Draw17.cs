@@ -9,7 +9,8 @@ namespace ConsoleCards.Editor.UI
     /// <summary>
     /// Board 17 "Draw tool (right rail + bar)" (owner, 2026-10-30): the Draw bar, built into the table HUD. It opens to the
     /// left of the rail, level with the Draw icon (I) (the rail's fifth button), 50 board px high: TOOL | LINE | SIZE | COLOUR |
-    /// Undo, CLEAR, ✕; under it one line of keys (or the label's words box). Measured from the board (x1.5).
+    /// Undo, CLEAR, ✕; under it one line of keys (or the label's words box, or the shapes). Measured from the board (x1.5).
+    /// Doc 62 (owner, 2026-11-21): a fifth tool, shapes (J): square, rectangle, circle, hexagon and hex grid.
     /// </summary>
     public static partial class TableHudBuilder
     {
@@ -44,14 +45,20 @@ namespace ConsoleCards.Editor.UI
             RectTransform tools = DrawGroup17(bar, "Tool", "TOOL", 3f);
             string[] toolIcons = { "HudDraw", "DrawHighlighter", "DrawLabel", "DrawEraser" };
             string[] toolKeys = { "N", "K", "O", "X" };
-            Button[] modeButtons = new Button[4];
-            Image[] modeFills = new Image[4];
+            Button[] modeButtons = new Button[5];
+            Image[] modeFills = new Image[5];
             for (int i = 0; i < 4; i++)
             {
                 modeButtons[i] = DrawButton17(tools, toolIcons[i], 54f, out modeFills[i], out RectTransform rect);
                 DrawIcon17(rect, toolIcons[i], 27f, 27f);
                 DrawKey17(rect, toolKeys[i]);
             }
+
+            // Doc 62: shapes (J), drawn as an outlined circle.
+            modeButtons[4] = DrawButton17(tools, "DrawShape", 54f, out modeFills[4], out RectTransform shapeTool);
+            Image shapeIcon = Shape(Centred("Icon", shapeTool, 27f, 27f), Soft, ring != null ? ring : circle);
+            shapeIcon.raycastTarget = false;
+            DrawKey17(shapeTool, "J");
 
             DrawRule17(bar, "Rule1");
 
@@ -146,6 +153,25 @@ namespace ConsoleCards.Editor.UI
             words.placeholder = placeholder;
             words.lineType = InputField.LineType.SingleLine;
             wordsRect.gameObject.SetActive(false);
+
+            // Doc 62: the shapes, in place of the keys while the shape tool is chosen.
+            RectTransform shapesRect = Rect("Shapes", holder, Vector2.one, Vector2.one, Vector2.one, new Vector2(right, -lineTop),
+                new Vector2(760f, 62f));
+            Fill(shapesRect, GlassStrong, round, Orange, 1.5f);
+            Row(shapesRect.gameObject, 8, 8, 4, 4, 6f, TextAnchor.MiddleLeft);
+            Fit(shapesRect.gameObject, true, false);
+            string[] shapeNames = { "SQUARE", "RECTANGLE", "CIRCLE", "HEXAGON", "HEX GRID" };
+            Button[] shapeButtons = new Button[shapeNames.Length];
+            Image[] shapeFills = new Image[shapeNames.Length];
+            for (int i = 0; i < shapeNames.Length; i++)
+            {
+                shapeButtons[i] = DrawButton17(shapesRect, "Shape" + (i + 1), 132f, out shapeFills[i], out RectTransform rect);
+                Text name = Label(Centred("Label", rect, 126f, 40f), bold, 15, Soft, TextAnchor.MiddleCenter, shapeNames[i]);
+                name.raycastTarget = false;
+            }
+
+            DrawHintWords17(shapesRect, "drag on the table");
+            shapesRect.gameObject.SetActive(false);
             bar.gameObject.SetActive(false);
             keys.gameObject.SetActive(false);
 
@@ -167,6 +193,9 @@ namespace ConsoleCards.Editor.UI
             drawSo.FindProperty("closeButton").objectReferenceValue = close;
             drawSo.FindProperty("keysLine").objectReferenceValue = keys.gameObject;
             drawSo.FindProperty("labelInput").objectReferenceValue = words;
+            drawSo.FindProperty("shapesLine").objectReferenceValue = shapesRect.gameObject;
+            Assign17(drawSo, "shapeButtons", shapeButtons);
+            Assign17(drawSo, "shapeFills", shapeFills);
             drawSo.FindProperty("onFill").colorValue = HoverFill;
             drawSo.FindProperty("clearWords").colorValue = DrawClearWords;
             drawSo.ApplyModifiedPropertiesWithoutUndo();

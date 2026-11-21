@@ -26,7 +26,7 @@ namespace ConsoleCards.Editor.UI
     /// </summary>
     public static partial class TableHudBuilder
     {
-        private const string HudLabel = "HudBoard7B10"; // B10: the Log (with its Chat) is on the rail, with a mark for unread messages (owner, 2026-11-20: "no chat option") // B9: the rail has a TOOLS header that hides and shows its buttons (designer note 05, 2026-11-17) // B8: the CC logo picture (owner, 2026-10-30) // B7: Draw is I, the player chip is a rounded box like the hint // B5: board 17's Draw on the rail and its bar
+        private const string HudLabel = "HudBoard7B11"; // B11: the Draw bar's shape tool (J) and its shapes (doc 62, owner 2026-11-21) // B10: the Log (with its Chat) is on the rail, with a mark for unread messages (owner, 2026-11-20: "no chat option") // B9: the rail has a TOOLS header that hides and shows its buttons (designer note 05, 2026-11-17) // B8: the CC logo picture (owner, 2026-10-30) // B7: Draw is I, the player chip is a rounded box like the hint // B5: board 17's Draw on the rail and its bar
         private const string HudArt = "Assets/ConsoleCards/Content/UI/Board/Hud/";
         private const float K = 1.5f; // board pixels to the 1920 x 1080 canvas
 

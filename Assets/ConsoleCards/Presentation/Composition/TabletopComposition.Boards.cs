@@ -495,6 +495,10 @@ namespace ConsoleCards.Presentation.Composition
                     : grid.WithSpace(CardSpaceWidth, CardSpaceDepth, CardSpaceGap))));
             if (placed)
             {
+                // Doc 62 (owner, 2026-11-21): hexagon spaces on a board you placed (a game's own board keeps its grid,
+                // its floor tiles are laid out on it).
+                actions.Add(new PopupActionOption(grid.Hex ? "Spaces: squares" : "Spaces: hexagons", true,
+                    () => ResizeBoard(boardId, grid.WithHex(!grid.Hex))));
                 actions.Add(new PopupActionOption("Duplicate", true, () =>
                     BeginBoardPlacement(grid, true, matchState.PlacedBoards[boardId].Pose.RotationDegrees)));
                 actions.Add(new PopupActionOption("Delete", true, () => DeleteBoard(boardId)));
@@ -503,7 +507,7 @@ namespace ConsoleCards.Presentation.Composition
             runtimeUi.ShowContextMenu(
                 boardMenuScreenPosition,
                 placed ? "BOARD" : "GAME BOARD",
-                $"{grid.Columns} x {grid.Rows} spaces ({(cardSpaces ? "card size" : "small tiles")})."
+                $"{grid.Columns} x {grid.Rows} {(grid.Hex ? "hexagon " : string.Empty)}spaces ({(cardSpaces ? "card size" : "small tiles")})."
                     + (placed ? " Cards on it stay where they are." : " The floor tiles do not move.")
                     + (string.IsNullOrEmpty(gridNote) ? string.Empty : " " + gridNote),
                 actions,
