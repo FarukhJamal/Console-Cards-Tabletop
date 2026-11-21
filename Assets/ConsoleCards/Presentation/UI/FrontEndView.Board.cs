@@ -202,7 +202,9 @@ namespace ConsoleCards.Presentation.UI
                     tile.ComingSoon ? SoonCover : tile.Mine ? CoverMine : CoverGame);
                 parts.dim.alpha = tile.ComingSoon ? 0.62f : 1f;
                 parts.button.interactable = !tile.ComingSoon;
-                if (parts.mark != null) parts.mark.SetActive(tile.Mine);
+                // Owner, 2026-11-21: the made-game hexagon mark only stands in for a missing cover; with a cover the
+                // YOUR GAME tag (top left) is enough.
+                if (parts.mark != null) parts.mark.SetActive(tile.Mine && tile.Picture == null);
                 if (parts.footer != null) parts.footer.SetActive(tile.Chosen);
                 for (int e = 0; e < parts.edges.Length; e++)
                 {
