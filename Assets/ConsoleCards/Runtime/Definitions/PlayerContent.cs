@@ -82,6 +82,7 @@ namespace ConsoleCards.Definitions
             for (int i = 0; i < decks.Count; i++)
             {
                 if (decks[i] != null && decks[i].cards == null) decks[i].cards = new List<PlayerDeckEntry>();
+                decks[i]?.NormaliseParts(); // doc 63: older files have no parts (a single deck)
             }
 
             return this;
@@ -228,6 +229,135 @@ namespace ConsoleCards.Definitions
 
         /// <summary>STAGES-1: this stage's front pictures, by card.</summary>
         public List<PlayerDeckFront> fronts = new List<PlayerDeckFront>();
+
+        /// <summary>
+        /// Doc 63 (owner, 2026-11-21): "Split into parts". Empty (the default, and every older file): one single deck.
+        /// With parts, each part has its own cards and <see cref="cards"/> is kept as the whole deck (every part's
+        /// cards added up, <see cref="SumParts"/>), so everything that reads a deck's cards still gets the whole deck.
+        /// </summary>
+        public List<PlayerDeckPart> parts = new List<PlayerDeckPart>();
+
+        public bool HasParts => parts != null && parts.Count > 0;
+
+        internal void NormaliseParts()
+        {
+            if (parts == null) parts = new List<PlayerDeckPart>();
+            for (int i = 0; i < parts.Count; i++)
+            {
+                if (parts[i] != null && parts[i].cards == null) parts[i].cards = new List<PlayerDeckEntry>();
+            }
+
+            parts.RemoveAll(part => part == null);
+        }
+
+        public PlayerDeckPart FindPart(string partId)
+        {
+            for (int i = 0; parts != null && i < parts.Count; i++)
+            {
+                if (parts[i] != null && string.Equals(parts[i].id, partId, StringComparison.OrdinalIgnoreCase)) return parts[i];
+            }
+
+            return null;
+        }
+
+        /// <summary>The whole deck again from its parts (nothing changes for a deck without parts).</summary>
+        public void SumParts()
+        {
+            if (!HasParts) return;
+            if (cards == null) cards = new List<PlayerDeckEntry>();
+            cards.Clear();
+            for (int p = 0; p < parts.Count; p++)
+            {
+                List<PlayerDeckEntry> entries = parts[p].cards;
+                for (int i = 0; entries != null && i < entries.Count; i++)
+                {
+                    PlayerDeckEntry entry = entries[i];
+                    if (entry == null || entry.count <= 0 || string.IsNullOrWhiteSpace(entry.cardId)) continue;
+                    PlayerDeckEntry whole = cards.Find(e => string.Equals(e.cardId, entry.cardId, StringComparison.OrdinalIgnoreCase));
+                    if (whole != null) whole.count += entry.count;
+                    else cards.Add(new PlayerDeckEntry { cardId = entry.cardId, count = entry.count });
+                }
+            }
+        }
+
+        /// <summary>
+        /// A card's copies in the whole deck. With parts, more copies go to the first part that has the card (else the
+        /// first part) and fewer are taken from the last parts first; then the whole deck is added up again.
+        /// </summary>
+        public void SetWholeCopies(string cardId, int copies)
+        {
+            copies = Math.Max(0, copies);
+            if (cards == null) cards = new List<PlayerDeckEntry>();
+            if (!HasParts)
+            {
+                cards.RemoveAll(entry => entry != null && string.Equals(entry.cardId, cardId, StringComparison.OrdinalIgnoreCase));
+                if (copies > 0) cards.Add(new PlayerDeckEntry { cardId = cardId, count = copies });
+                return;
+            }
+
+            int now = 0;
+            for (int p = 0; p < parts.Count; p++) now += parts[p].CopiesOf(cardId);
+            if (copies > now)
+            {
+                PlayerDeckPart target = parts[0];
+                for (int p = 0; p < parts.Count; p++)
+                {
+                    if (parts[p].CopiesOf(cardId) <= 0) continue;
+                    target = parts[p];
+                    break;
+                }
+
+                target.SetCopies(cardId, target.CopiesOf(cardId) + copies - now);
+            }
+
+            for (int p = parts.Count - 1; p >= 0 && now > copies; p--)
+            {
+                int has = parts[p].CopiesOf(cardId);
+                int take = Math.Min(has, now - copies);
+                if (take <= 0) continue;
+                parts[p].SetCopies(cardId, has - take);
+                now -= take;
+            }
+
+            SumParts();
+        }
+    }
+
+    /// <summary>Doc 63 (owner, 2026-11-21): one named part of a deck split into parts ("Part 1"), with its own cards.</summary>
+    [Serializable]
+    public sealed class PlayerDeckPart
+    {
+        public string id = string.Empty;
+        public string name = string.Empty;
+        public List<PlayerDeckEntry> cards = new List<PlayerDeckEntry>();
+
+        public int CopiesOf(string cardId)
+        {
+            int copies = 0;
+            for (int i = 0; cards != null && i < cards.Count; i++)
+            {
+                if (cards[i] != null && string.Equals(cards[i].cardId, cardId, StringComparison.OrdinalIgnoreCase)) copies += cards[i].count;
+            }
+
+            return copies;
+        }
+
+        public void SetCopies(string cardId, int copies)
+        {
+            if (cards == null) cards = new List<PlayerDeckEntry>();
+            cards.RemoveAll(entry => entry != null && string.Equals(entry.cardId, cardId, StringComparison.OrdinalIgnoreCase));
+            if (copies > 0) cards.Add(new PlayerDeckEntry { cardId = cardId, count = copies });
+        }
+
+        public int Total
+        {
+            get
+            {
+                int total = 0;
+                for (int i = 0; cards != null && i < cards.Count; i++) total += cards[i] != null ? Math.Max(0, cards[i].count) : 0;
+                return total;
+            }
+        }
     }
 
     /// <summary>STAGE-3: one rule's value as the game's default (rule entry stable ID and its value).</summary>

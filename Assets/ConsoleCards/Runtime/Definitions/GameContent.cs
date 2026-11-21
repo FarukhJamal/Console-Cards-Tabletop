@@ -266,6 +266,9 @@ namespace ConsoleCards.Definitions
         private void AddNewCards(Dictionary<string, CardDefinition> builtIn)
         {
             string artFolder = ArtFolderOf(definition);
+            // Doc 63 (owner, 2026-11-21): "Your cards" are plain cards; one with no "works like" uses the plain card.
+            bool library = PlayerLibrary.IsLibrary(definition);
+            CardDefinition plain = library ? PlayerLibrary.PlainModelOf(definition) : null;
             for (int i = 0; i < PlayerCards.cards.Count; i++)
             {
                 PlayerCardRecord record = PlayerCards.cards[i];
@@ -285,12 +288,18 @@ namespace ConsoleCards.Definitions
 
                 if (!builtIn.TryGetValue(record.behavesLike ?? string.Empty, out CardDefinition model))
                 {
-                    warnings.Add($"The card '{record.name}' behaves like '{record.behavesLike}', which this game does not have; it is skipped.");
-                    continue;
+                    if (plain == null)
+                    {
+                        warnings.Add($"The card '{record.name}' behaves like '{record.behavesLike}', which this game does not have; it is skipped.");
+                        continue;
+                    }
+
+                    model = plain;
                 }
 
+                // Doc 63: a library card's cost is plain words ("2 gems"), kept as typed and never read as controller input.
                 InputCostDefinition cost = null;
-                if (!string.IsNullOrWhiteSpace(record.cost) && !TryReadCost(record.cost, record.name, out cost)) cost = null;
+                if (!library && !string.IsNullOrWhiteSpace(record.cost) && !TryReadCost(record.cost, record.name, out cost)) cost = null;
                 string name = string.IsNullOrWhiteSpace(record.name) ? $"New {model.DisplayName}" : record.name.Trim();
                 CardDefinition card = CardDefinition.CreateRuntime(
                     model,

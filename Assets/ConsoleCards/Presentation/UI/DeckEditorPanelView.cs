@@ -53,6 +53,10 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>STAGES-1: the words on the button under the deck when the actions give it another use.</summary>
         public string ExtraButtonText = string.Empty;
         public string Status = string.Empty;
+        /// <summary>Doc 63 (owner, 2026-11-21): SPLIT INTO PARTS / ONE DECK on the selected deck, and ADD PART.</summary>
+        public bool CanSplit;
+        public string SplitText = "SPLIT INTO PARTS";
+        public bool CanAddPart;
     }
 
     /// <summary>The deck editor's actions, supplied by the game.</summary>
@@ -78,6 +82,9 @@ namespace ConsoleCards.Presentation.UI
         /// <see cref="DeckEditorModel.ExtraButtonText"/> on it (a stage: IMPORT FRONTS…).
         /// </summary>
         public Action ExtraButton;
+        /// <summary>Doc 63: split the selected deck into parts, or make it one deck again.</summary>
+        public Action ToggleParts;
+        public Action AddPart;
     }
 
     /// <summary>
@@ -143,6 +150,12 @@ namespace ConsoleCards.Presentation.UI
         [Tooltip("DONE: saves and closes.")]
         [SerializeField] private Button doneButton;
 
+        // Doc 63 (owner, 2026-11-21). Optional: a panel made before it works as before, without parts.
+        [Header("Deck parts (doc 63)")]
+        [SerializeField] private Button splitPartsButton;
+        [SerializeField] private Text splitPartsLabel;
+        [SerializeField] private Button addPartButton;
+
         private readonly List<GameObject> addRows = new List<GameObject>();
         private readonly List<DeckEditorCardRowModel> boardCards = new List<DeckEditorCardRowModel>();
         private readonly System.Text.StringBuilder testWords = new System.Text.StringBuilder(128);
@@ -206,6 +219,18 @@ namespace ConsoleCards.Presentation.UI
             filterButton.onClick.AddListener(HandleFilter);
             undoButton.onClick.AddListener(HandleUndo);
             saveButton.onClick.AddListener(HandleSave);
+            if (splitPartsButton != null)
+            {
+                splitPartsButton.onClick.AddListener(HandleToggleParts);
+                splitPartsButton.interactable = model.CanSplit;
+            }
+
+            if (splitPartsLabel != null) splitPartsLabel.text = model.SplitText;
+            if (addPartButton != null)
+            {
+                addPartButton.onClick.AddListener(HandleAddPart);
+                addPartButton.interactable = model.CanAddPart;
+            }
 
             float deckPlace = deckScroll.verticalNormalizedPosition;
             float cardPlace = cardScroll.verticalNormalizedPosition;
@@ -277,6 +302,8 @@ namespace ConsoleCards.Presentation.UI
             Clear(filterButton);
             Clear(undoButton);
             Clear(saveButton);
+            Clear(splitPartsButton);
+            Clear(addPartButton);
         }
 
         private static void Clear(Button button)
@@ -488,5 +515,7 @@ namespace ConsoleCards.Presentation.UI
         private void HandleCopies(string cardId, int step) => actions?.ChangeCopies?.Invoke(cardId, step);
         private void HandleUndo() => actions?.Undo?.Invoke();
         private void HandleSave() => actions?.Save?.Invoke();
+        private void HandleToggleParts() => actions?.ToggleParts?.Invoke();
+        private void HandleAddPart() => actions?.AddPart?.Invoke();
     }
 }

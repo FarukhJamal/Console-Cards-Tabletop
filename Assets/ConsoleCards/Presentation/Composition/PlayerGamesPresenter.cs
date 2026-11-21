@@ -488,8 +488,13 @@ namespace ConsoleCards.Presentation.Composition
             for (int g = 0; g < host.CardEditorPanel.editorGames.Count; g++)
             {
                 GameDefinition game = host.CardEditorPanel.editorGames[g];
-                choices.Add(new DeckChoice { Id = CardEditorPresenter.GameDeckId, Name = $"{game.DisplayName} deck", Game = game });
-                host.GameSelectPanel.AddDeckChoices(choices, game, true);
+                // Doc 63: "Your cards" (first in the list) offers its decks with plain names, each part too.
+                if (!PlayerLibrary.IsLibrary(game))
+                {
+                    choices.Add(new DeckChoice { Id = CardEditorPresenter.GameDeckId, Name = $"{game.DisplayName} deck", Game = game });
+                }
+
+                host.GameSelectPanel.AddDeckChoices(choices, game, true, true);
             }
 
             return choices;
@@ -532,6 +537,12 @@ namespace ConsoleCards.Presentation.Composition
             different = 0;
             List<ObjectDefinitionId> cards = new List<ObjectDefinitionId>();
             if (choice?.Game == null) return cards;
+            if (choice.Deck != null && PlayerLibrary.IsLibrary(choice.Game))
+            {
+                different = AddLibraryDeckCards(choice, lines, cards); // doc 63: no pictures to load
+                return cards;
+            }
+
             ContentArtService previous = host.CardEditorPanel.UseEditorGame(choice.Game);
             previous?.Dispose();
             try
@@ -552,6 +563,32 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             return cards;
+        }
+
+        // Doc 63: a "Your cards" deck (or one of its parts) as the deck editor counts it: your cards in file order.
+        private int AddLibraryDeckCards(DeckChoice choice, List<string> lines, List<ObjectDefinitionId> cards)
+        {
+            PlayerDeckPart part = string.IsNullOrEmpty(choice.PartId) ? null : choice.Deck.FindPart(choice.PartId);
+            List<PlayerDeckEntry> entries = part != null ? part.cards : choice.Deck.cards;
+            PlayerCardsFile mine = ContentPackStore.ForLibrary(host.EnsureProfile(), true).LoadCards(PlayerLibrary.Id);
+            int different = 0;
+            for (int i = 0; entries != null && i < mine.cards.Count; i++)
+            {
+                PlayerCardRecord record = mine.cards[i];
+                if (record == null || !Guid.TryParse(record.id, out Guid id)) continue;
+                int copies = 0;
+                for (int e = 0; e < entries.Count; e++)
+                {
+                    if (entries[e] != null && string.Equals(entries[e].cardId, record.id, StringComparison.OrdinalIgnoreCase)) copies += entries[e].count;
+                }
+
+                if (copies <= 0) continue;
+                different++;
+                lines.Add($"{copies} x {(string.IsNullOrWhiteSpace(record.name) ? "(no name)" : record.name)}");
+                for (int c = 0; c < copies; c++) cards.Add(new ObjectDefinitionId(id));
+            }
+
+            return different;
         }
 
         // The deck editor with a new deck for the chosen deck's game; back here when it closes, with that deck chosen.
@@ -579,7 +616,7 @@ namespace ConsoleCards.Presentation.Composition
             OpenEditorFromSave(host.CardEditorPanel.OpenCardEditor);
             host.CardEditorPanel.NewEditorCard(default);
             if (host.CardEditorPanel.editorDraft == null || !host.CardEditorPanel.editorDraft.IsNew) return;
-            if (deck.Deck != null) host.CardEditorPanel.editorDraft.DeckCopies[deck.Id] = 1;
+            if (deck.Deck != null) host.CardEditorPanel.editorDraft.DeckCopies[deck.Deck.id] = 1; // doc 63: a part's deck
             host.CardEditorPanel.ShowCardEditor($"A new card in {deck.Name}. Give it a name and pictures, Save, then Close to go back to your game.");
         }
 
@@ -627,6 +664,7 @@ namespace ConsoleCards.Presentation.Composition
         // Places the chosen deck where the game's deck should lie; the panel comes back when placed or cancelled.
         internal void PutSaveDeckOnTable(DeckChoice deck)
         {
+            host.RefreshLibraryLook(); // doc 63: "Your cards" made just now look right on the table
             List<ObjectDefinitionId> cards = SaveDeckCards(deck, out _, out _);
             if (cards.Count == 0 || host.componentPlacementController == null)
             {
@@ -678,6 +716,14 @@ namespace ConsoleCards.Presentation.Composition
             saveDeckGameId = deck.gameId;
             saveDeckId = deck.deckId;
             DeckChoice choice = ChosenSaveDeck(choices);
+            if (choice.Game == null && !PlayerLibrary.IsLibrary(deck.gameId))
+            {
+                // Doc 63: a deck moved from its game into "Your cards" is found there.
+                saveDeckGameId = PlayerLibrary.Id;
+                choice = ChosenSaveDeck(choices);
+                if (choice.Game == null) saveDeckGameId = deck.gameId;
+            }
+
             if (choice.Game == null) return false;
             List<ObjectDefinitionId> cards = SaveDeckCards(choice, out _, out _);
             int maximum = CreateTabletopComponentUseCase.MaximumDeckCardCount;
@@ -804,6 +850,7 @@ namespace ConsoleCards.Presentation.Composition
             try
             {
                 host.SessionService.RegisterGameTemplates(); // your newest cards look right on the table
+                host.RefreshLibraryLook(); // doc 63: "Your cards" too
             }
             catch (Exception exception)
             {

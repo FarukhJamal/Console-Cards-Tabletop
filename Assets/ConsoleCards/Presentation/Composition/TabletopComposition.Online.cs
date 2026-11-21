@@ -145,6 +145,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             TrapFloorGame.ForgetLayoutStore();
+            DestroyLibraryLook(); // doc 63: "Your cards" are read again from the store now in use
             if (TableGame == null) return;
             EnsureContentArt();
             try

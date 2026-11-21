@@ -51,6 +51,12 @@ namespace ConsoleCards.Presentation.Composition
 
         private Texture2D Art(string key, Texture2D builtIn)
         {
+            if (PlayerLibrary.IsLibraryArtKey(key)) // doc 63: "Your cards" pictures come from the library
+            {
+                EnsureLibraryLook();
+                if (libraryArt != null) return libraryArt.Resolve(key, builtIn);
+            }
+
             EnsureContentArt();
             return contentArt.Resolve(key, builtIn);
         }
@@ -369,6 +375,7 @@ namespace ConsoleCards.Presentation.Composition
             if (definitionId.IsEmpty) return false;
             if (tableContent != null && tableContent.TryGetCard(definitionId, out definition)) return true;
             if (TableGame != null && TableGame.TryGetCard(definitionId, out definition)) return true;
+            if (TryGetLibraryCard(definitionId, out definition)) return true; // doc 63: "Your cards"
             IReadOnlyList<ComponentCatalog> boxes = componentLibrary != null ? componentLibrary.GameBoxes : null;
             for (int i = 0; boxes != null && i < boxes.Count; i++)
             {
@@ -378,6 +385,102 @@ namespace ConsoleCards.Presentation.Composition
 
             definition = null;
             return false;
+        }
+
+        // ---------- doc 63 (owner, 2026-11-21): "Your cards" ----------
+
+        private GameDefinition libraryGame;
+        private GameContent libraryContent;
+        private ContentArtService libraryArt;
+        private bool libraryLookBuilt;
+
+        /// <summary>
+        /// The "Your cards" library as a runtime game (made once). The one-time move of the cards made in Trap Floor
+        /// into the library runs the first time it is asked for.
+        /// </summary>
+        internal GameDefinition LibraryGame
+        {
+            get
+            {
+                if (libraryGame != null) return libraryGame;
+                libraryGame = PlayerLibrary.CreateDefinition(LibraryLookCard());
+                PlayerLibraryMigration.RunOnce(EnsureProfile(), Cartridges.DefaultGame);
+                return libraryGame;
+            }
+        }
+
+        // The plain card borrows the look (back, orientation) of the default game's first standard card.
+        private CardDefinition LibraryLookCard()
+        {
+            GameDefinition game = Cartridges.DefaultGame;
+            for (int s = 0; game != null && s < game.ContentSets.Count; s++)
+            {
+                GameContentSet set = game.ContentSets[s];
+                for (int c = 0; set != null && c < set.Cards.Count; c++)
+                {
+                    CardDefinition card = set.Cards[c];
+                    if (card != null && card.RepresentedControllerInput == null && card.SizeClass == CardSizeClass.Standard) return card;
+                }
+            }
+
+            return null;
+        }
+
+        // The library's cards and pictures as played here (in someone else's room: the host's), read once until
+        // RefreshLibraryLook. Lookups after that allocate nothing.
+        private void EnsureLibraryLook()
+        {
+            if (libraryLookBuilt) return;
+            libraryLookBuilt = true;
+            try
+            {
+                GameDefinition library = LibraryGame;
+                ContentPackStore store = ContentPackStore.ForLibrary(EnsureProfile(), false);
+                libraryArt = new ContentArtService(store);
+                libraryArt.Library.TextureReleased += HandleArtTextureReleased; // card materials let go of its pictures
+                libraryArt.UseGame(library);
+                libraryContent = new GameContent(library, store.LoadCards(PlayerLibrary.Id), store.LoadDecks(PlayerLibrary.Id));
+                for (int i = 0; i < libraryContent.Warnings.Count; i++)
+                {
+                    Debug.LogWarning($"[Your cards] {libraryContent.Warnings[i]}", this);
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[Your cards] Your cards could not be read: {exception.Message}", this);
+            }
+        }
+
+        internal bool TryGetLibraryCard(ObjectDefinitionId definitionId, out CardDefinition definition)
+        {
+            definition = null;
+            if (definitionId.IsEmpty) return false;
+            EnsureLibraryLook();
+            return libraryContent != null && libraryContent.TryGetCard(definitionId, out definition);
+        }
+
+        /// <summary>Doc 63: "Your cards" changed (studio, deck builder, a room's content): read again and redraw.</summary>
+        internal void RefreshLibraryLook()
+        {
+            DestroyLibraryLook();
+            landscapeCards.Clear();
+            RefreshAllCardArt();
+        }
+
+        internal void DestroyLibraryLook()
+        {
+            libraryContent?.Destroy();
+            libraryContent = null;
+            libraryArt?.Dispose();
+            libraryArt = null;
+            libraryLookBuilt = false;
+        }
+
+        internal void DestroyLibrary()
+        {
+            DestroyLibraryLook();
+            PlayerLibrary.Destroy(libraryGame);
+            libraryGame = null;
         }
 
         internal bool TryGetAvatarLook(ObjectDefinitionId definitionId, out AvatarDefinition avatar)

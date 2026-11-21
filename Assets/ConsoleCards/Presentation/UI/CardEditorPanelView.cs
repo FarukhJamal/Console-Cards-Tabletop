@@ -106,6 +106,8 @@ namespace ConsoleCards.Presentation.UI
         public string Cost = string.Empty;
         public string WorksLike = string.Empty;
         public bool CanChangeWorksLike;
+        /// <summary>Doc 63 (owner, 2026-11-21): false for "Your cards" (plain cards): the works-like arrows are hidden.</summary>
+        public bool ShowWorksLike = true;
         public IReadOnlyList<CardEditorDeckRowModel> Decks = Array.Empty<CardEditorDeckRowModel>();
         public Texture Front;
         public Texture Back;
@@ -370,6 +372,8 @@ namespace ConsoleCards.Presentation.UI
             worksLikeLabel.text = model.WorksLike;
             worksLikePrevious.interactable = model.CanChangeWorksLike;
             worksLikeNext.interactable = model.CanChangeWorksLike;
+            if (worksLikePrevious.gameObject.activeSelf != model.ShowWorksLike) worksLikePrevious.gameObject.SetActive(model.ShowWorksLike);
+            if (worksLikeNext.gameObject.activeSelf != model.ShowWorksLike) worksLikeNext.gameObject.SetActive(model.ShowWorksLike);
             frontPreview.texture = model.Front;
             backPreview.texture = model.Back;
             backPreview.color = model.Back != null ? Color.white : new Color(1f, 1f, 1f, 0.35f);

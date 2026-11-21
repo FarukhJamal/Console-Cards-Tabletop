@@ -1037,6 +1037,7 @@ namespace ConsoleCards.Presentation.Composition
             CardEditorPanel.DisposeCardEditor(); // and those the card editor loaded for another game
             tableContent?.Destroy(); // destroys the cards made from the player's content
             tableContent = null;
+            DestroyLibrary(); // doc 63: and the "Your cards" library made at runtime
             for (int i = 0; i < houseRuleSets.Count; i++)
             {
                 if (houseRuleSets[i] != null) Destroy(houseRuleSets[i]);

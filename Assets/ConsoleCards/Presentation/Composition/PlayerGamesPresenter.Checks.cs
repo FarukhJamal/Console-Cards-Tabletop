@@ -168,6 +168,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             counted = !store.IsGameData;
+            AddLibraryCardIds(ids); // doc 63: "Your cards" are made cards too (kept in the profile, also in the Editor)
             if (!Directory.Exists(store.RootFolder)) return ids;
             foreach (string folder in Directory.GetDirectories(store.RootFolder))
             {
@@ -181,6 +182,22 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             return ids;
+        }
+
+        private void AddLibraryCardIds(HashSet<string> ids)
+        {
+            try
+            {
+                PlayerCardsFile file = ContentPackStore.ForLibrary(host.EnsureProfile(), true).LoadCards(PlayerLibrary.Id);
+                for (int i = 0; i < file.cards.Count; i++)
+                {
+                    if (file.cards[i] != null && !string.IsNullOrEmpty(file.cards[i].id)) ids.Add(file.cards[i].id);
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning("[Your games] Could not read Your cards: " + exception.Message);
+            }
         }
     }
 }

@@ -42,7 +42,7 @@ namespace ConsoleCards.Presentation.Composition
             CardEditorPresenter studio = host.CardEditorPanel;
             if (card.Record != null)
             {
-                CardDefinition model = studio.FindEditorGameCard(card.Record.behavesLike);
+                CardDefinition model = studio.FindEditorModel(card.Record.behavesLike);
                 string key = string.IsNullOrWhiteSpace(card.Record.backArtKey) ? model?.BackArtworkReference : card.Record.backArtKey;
                 return studio.DraftPicture(key, model, false);
             }

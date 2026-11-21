@@ -81,6 +81,9 @@ namespace ConsoleCards.Presentation.Composition
         internal CardEditorDraft editorDraft;
         internal CardEditorActions cardEditorActions;
         internal string editorArtFolder = string.Empty;
+        // Doc 63 (owner, 2026-11-21): the plain card of "Your cards" while the library is edited; null for a game.
+        internal CardDefinition editorPlainModel;
+        internal bool EditingLibrary => editorPlainModel != null;
 
         // The card editor opens from the game selection menu (L2-4) and, so cards can be looked at without starting
         // a new table, straight from the Table menu row "Card editor…" (2026-10-18, owner request).
@@ -122,6 +125,8 @@ namespace ConsoleCards.Presentation.Composition
         {
             editorGames.Clear();
             HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            GameDefinition library = host.LibraryGame; // doc 63: "Your cards" first, not tied to any game
+            if (library != null && seen.Add(library.StableId ?? string.Empty)) editorGames.Add(library);
             IReadOnlyList<IGameCartridge> cartridges = host.Cartridges.CodeCartridges; // CART-1b: the games with code first
             for (int i = 0; i < cartridges.Count; i++)
             {
@@ -144,11 +149,16 @@ namespace ConsoleCards.Presentation.Composition
             ContentArtService previous = editorOtherArt;
             editorOtherArt = null;
             // Audit C-1: a guest in someone else's room always edits its own saves, never the room's copy.
-            if (!host.UsesTableArt(game) || ContentPackStore.InSomeoneElsesRoom)
+            bool library = PlayerLibrary.IsLibrary(game);
+            if (library || !host.UsesTableArt(game) || ContentPackStore.InSomeoneElsesRoom)
             {
-                editorOtherArt = new ContentArtService(ContentPackStore.ForOwnEdits(host.EnsureProfile()));
+                editorOtherArt = new ContentArtService(library
+                    ? ContentPackStore.ForLibrary(host.EnsureProfile(), true) // doc 63: always the profile
+                    : ContentPackStore.ForOwnEdits(host.EnsureProfile()));
                 editorOtherArt.UseGame(game);
             }
+
+            editorPlainModel = library ? PlayerLibrary.PlainModelOf(game) : null;
 
             editorGame = game;
             editorCards = EditorArt.Store.LoadCards(EditorArt.GameId);
@@ -156,7 +166,7 @@ namespace ConsoleCards.Presentation.Composition
             editorArtFolder = GameContent.ArtFolderOf(game);
             editorGameCards.Clear();
             HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            for (int s = 0; s < game.ContentSets.Count; s++)
+            for (int s = 0; !library && s < game.ContentSets.Count; s++)
             {
                 GameContentSet set = game.ContentSets[s];
                 for (int c = 0; set != null && c < set.Cards.Count; c++)
@@ -167,7 +177,7 @@ namespace ConsoleCards.Presentation.Composition
                 }
             }
 
-            editorDraft = editorGameCards.Count > 0 ? DraftForGameCard(editorGameCards[0]) : null;
+            editorDraft = editorGameCards.Count > 0 ? DraftForGameCard(editorGameCards[0]) : FirstRecordDraft();
             return previous;
         }
 
@@ -179,7 +189,7 @@ namespace ConsoleCards.Presentation.Composition
             GameDefinition next = editorGames[((index + step) % editorGames.Count + editorGames.Count) % editorGames.Count];
             ContentArtService previous = UseEditorGame(next);
             TakeEditorUndo();
-            ShowCardEditor($"Now editing {next.DisplayName}'s cards.");
+            ShowCardEditor(PlayerLibrary.IsLibrary(next) ? "Now editing your own cards (Your cards)." : $"Now editing {next.DisplayName}'s cards.");
             previous?.Dispose();
         }
 
@@ -236,6 +246,7 @@ namespace ConsoleCards.Presentation.Composition
                     : status,
                 Saved = editorAutoSaved,
                 CanImport = PictureFilePicker.IsAvailable,
+                ShowWorksLike = !EditingLibrary, // doc 63
             };
             editorLastStatus = status ?? string.Empty;
 
@@ -253,7 +264,9 @@ namespace ConsoleCards.Presentation.Composition
                 model.Name = draft.Name;
                 model.Description = draft.Description;
                 model.Cost = draft.Cost;
-                model.WorksLike = model0 == null
+                model.WorksLike = EditingLibrary
+                    ? "A plain card: no game rules" // doc 63: "Your cards" need no "Works like"
+                    : model0 == null
                     ? "?"
                     : draft.IsNew ? $"{model0.DisplayName} ({model0.Category})" : $"Itself ({model0.Category})";
                 model.CanChangeWorksLike = draft.IsNew && editorGameCards.Count > 1;
@@ -305,12 +318,13 @@ namespace ConsoleCards.Presentation.Composition
             {
                 PlayerCardRecord record = editorCards.cards[i];
                 if (record == null) continue;
-                CardDefinition model = FindEditorGameCard(record.behavesLike);
+                CardDefinition model = FindEditorModel(record.behavesLike);
                 string code = string.IsNullOrWhiteSpace(record.code) ? string.Empty : $"{record.code} · ";
+                string kind = EditingLibrary ? "Your card" : $"Your card · works like {(model != null ? model.DisplayName : "?")}";
                 rows.Add(new CardEditorRowModel(
                     record.id,
                     string.IsNullOrWhiteSpace(record.name) ? "(no name)" : record.name,
-                    $"{code}Your card · works like {(model != null ? model.DisplayName : "?")} · {CopiesText(record.quantity)}",
+                    $"{code}{kind} · {CopiesText(record.quantity)}",
                     DraftPicture(FrontKeyOf(record), model, true),
                     editorDraft != null && editorDraft.IsNew && editorDraft.Id == record.id));
             }
@@ -360,6 +374,7 @@ namespace ConsoleCards.Presentation.Composition
             editorAutoSaved = false;
             CardDefinition model = editorDraft != null ? FindEditorGameCard(editorDraft.WorksLikeId) : null;
             if (model == null && editorGameCards.Count > 0) model = editorGameCards[0];
+            if (model == null) model = editorPlainModel; // doc 63: a card of yours in "Your cards"
             if (model == null) return;
             editorDraft = new CardEditorDraft
             {
@@ -377,7 +392,9 @@ namespace ConsoleCards.Presentation.Composition
             editorDraft.Frame = model.FrameVariant; // and its frame
             editorDraft.Large = ModelIsLarge(model); // and its size
             TakeEditorUndo();
-            ShowCardEditor("A new card. Give it a name, pick the card it works like and its pictures; each change is saved as you make it.");
+            ShowCardEditor(EditingLibrary
+                ? "A new card. Give it a name, a cost if it has one and its pictures; each change is saved as you make it."
+                : "A new card. Give it a name, pick the card it works like and its pictures; each change is saved as you make it.");
         }
 
         // In a deck or not: the tick puts one copy in, or takes every copy out.
@@ -647,14 +664,21 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
-            if (!InputCostNotation.TryParse(draft.Cost, out InputCostData costData, out string costError))
+            draft.Name = name;
+            if (EditingLibrary)
+            {
+                draft.Cost = (draft.Cost ?? string.Empty).Trim(); // doc 63: plain words, kept as typed ("2 gems")
+            }
+            else if (!InputCostNotation.TryParse(draft.Cost, out InputCostData costData, out string costError))
             {
                 problem = $"The cost could not be read: {costError}. Write it like Up + A/B/X/Y.";
                 return false;
             }
+            else
+            {
+                draft.Cost = InputCostNotation.Format(costData);
+            }
 
-            draft.Name = name;
-            draft.Cost = InputCostNotation.Format(costData);
             draft.Copies = Mathf.Clamp(draft.Copies, 0, CardEditorMaximumCopies);
             if (draft.IsNew && !TryCleanCode(draft, out string codeError))
             {
@@ -709,7 +733,7 @@ namespace ConsoleCards.Presentation.Composition
             string worksLike = draft.WorksLikeId;
             DropUnsavedNewCard();
             CardDefinition model = FindEditorGameCard(worksLike);
-            editorDraft = model != null ? DraftForGameCard(model) : null;
+            editorDraft = DraftAfterDrop(model);
             ShowCardEditor("The new card was dropped.");
         }
 
@@ -729,7 +753,7 @@ namespace ConsoleCards.Presentation.Composition
             RemoveEditorPicture(PlayerContent.DefaultArtKey(editorArtFolder, draft.Id, true));
             RemoveEditorPicture(PlayerContent.DefaultArtKey(editorArtFolder, draft.Id, false));
             CardDefinition model = FindEditorGameCard(draft.WorksLikeId);
-            editorDraft = model != null ? DraftForGameCard(model) : null;
+            editorDraft = DraftAfterDrop(model);
             ShowCardEditor($"Deleted {name}.");
         }
 
@@ -738,6 +762,7 @@ namespace ConsoleCards.Presentation.Composition
             DropUnsavedNewCard();
             host.runtimeUi?.CloseCardEditor();
             DisposeCardEditor();
+            host.RefreshLibraryLook(); // doc 63: the table shows "Your cards" as just saved
             host.GameSelectPanel.ReturnToGameSelect();
         }
 
@@ -756,7 +781,7 @@ namespace ConsoleCards.Presentation.Composition
             record.code = draft.Code;
             record.name = draft.Name;
             record.description = draft.Description;
-            record.behavesLike = draft.WorksLikeId;
+            record.behavesLike = EditingLibrary ? string.Empty : draft.WorksLikeId; // doc 63: library cards are plain
             record.quantity = draft.Copies;
             record.cost = draft.Cost;
             record.frontArtKey = draft.FrontKey;
@@ -877,6 +902,11 @@ namespace ConsoleCards.Presentation.Composition
             {
                 if (editorDecks.decks[d] == null) continue;
                 changed |= editorDecks.decks[d].cards.RemoveAll(entry => entry != null && entry.cardId == cardId) > 0;
+                List<PlayerDeckPart> parts = editorDecks.decks[d].parts; // doc 63
+                for (int p = 0; parts != null && p < parts.Count; p++)
+                {
+                    if (parts[p]?.cards != null) changed |= parts[p].cards.RemoveAll(entry => entry != null && entry.cardId == cardId) > 0;
+                }
             }
 
             if (changed) EditorArt.Store.SaveDecks(EditorArt.GameId, editorDecks);
@@ -893,8 +923,7 @@ namespace ConsoleCards.Presentation.Composition
                 int saved = SavedDeckCopies(deck, draft.Id);
                 int wanted = draft.DeckCopies.TryGetValue(deck.id, out int copies) ? copies : 0;
                 if (saved == wanted) continue;
-                deck.cards.RemoveAll(entry => entry != null && string.Equals(entry.cardId, draft.Id, StringComparison.OrdinalIgnoreCase));
-                if (wanted > 0) deck.cards.Add(new PlayerDeckEntry { cardId = draft.Id, count = wanted });
+                deck.SetWholeCopies(draft.Id, wanted); // doc 63: a deck split into parts keeps its parts
                 changed = true;
             }
 
@@ -948,6 +977,7 @@ namespace ConsoleCards.Presentation.Composition
                 yours += editorDraft.Copies;
             }
 
+            if (EditingLibrary) return $"YOUR CARDS · {total} CARD{(total == 1 ? string.Empty : "S")}"; // doc 63
             string own = yours > 0 ? $" ({yours} of yours)" : string.Empty;
             return $"{gameName.ToUpperInvariant()} DECK · {total} CARD{(total == 1 ? string.Empty : "S")}{own}";
         }
@@ -956,7 +986,9 @@ namespace ConsoleCards.Presentation.Composition
         {
             List<CardEditorDeckRowModel> rows = new List<CardEditorDeckRowModel>(1 + editorDecks.decks.Count)
             {
-                new CardEditorDeckRowModel(GameDeckId, $"{gameName} deck", "The game's own deck: copies in play", draft.Copies),
+                EditingLibrary
+                    ? new CardEditorDeckRowModel(GameDeckId, "All your cards", "Every card of yours, with its copies", draft.Copies) // doc 63
+                    : new CardEditorDeckRowModel(GameDeckId, $"{gameName} deck", "The game's own deck: copies in play", draft.Copies),
             };
             for (int d = 0; d < editorDecks.decks.Count; d++)
             {
@@ -1053,9 +1085,23 @@ namespace ConsoleCards.Presentation.Composition
             return draft;
         }
 
+        // Doc 63: after a card is dropped or deleted, the model's game card; in "Your cards" the first card of yours.
+        internal CardEditorDraft DraftAfterDrop(CardDefinition model) =>
+            model != null && !ReferenceEquals(model, editorPlainModel) ? DraftForGameCard(model) : FirstRecordDraft();
+
+        internal CardEditorDraft FirstRecordDraft()
+        {
+            for (int i = 0; editorCards != null && i < editorCards.cards.Count; i++)
+            {
+                if (editorCards.cards[i] != null && !string.IsNullOrWhiteSpace(editorCards.cards[i].id)) return DraftForRecord(editorCards.cards[i]);
+            }
+
+            return null;
+        }
+
         internal CardEditorDraft DraftForRecord(PlayerCardRecord record)
         {
-            CardDefinition model = FindEditorGameCard(record.behavesLike);
+            CardDefinition model = FindEditorModel(record.behavesLike);
             CardEditorDraft draft = new CardEditorDraft
             {
                 IsNew = true,
@@ -1121,8 +1167,13 @@ namespace ConsoleCards.Presentation.Composition
                 if (string.Equals(editorGameCards[i].StableId, cardId, StringComparison.OrdinalIgnoreCase)) return editorGameCards[i];
             }
 
+            // Doc 63: in "Your cards" the plain card is every card's model.
+            if (editorPlainModel != null && string.Equals(editorPlainModel.StableId, cardId, StringComparison.OrdinalIgnoreCase)) return editorPlainModel;
             return null;
         }
+
+        // The model of a card of yours by its "works like"; in "Your cards" (no "works like") the plain card.
+        internal CardDefinition FindEditorModel(string behavesLike) => FindEditorGameCard(behavesLike) ?? editorPlainModel;
 
         internal CardChangeRecord FindEditorChange(string cardId)
         {

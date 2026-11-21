@@ -47,6 +47,9 @@ namespace ConsoleCards.Presentation.Content
         /// </summary>
         public ContentPackStore GameDataStore { get; }
 
+        // Doc 63 (owner, 2026-11-21): "Your cards" has no game edits in the project under it.
+        private bool UsesGameData => GameDataStore != null && !PlayerLibrary.IsLibrary(GameId);
+
         public ArtLibrary Library { get; } = new ArtLibrary();
         public ContentPackStore Store { get; }
         public string GameId { get; private set; } = string.Empty;
@@ -75,7 +78,7 @@ namespace ConsoleCards.Presentation.Content
         {
             if (!HasGame) return new PlayerCardsFile();
             ContentPackInfo pack = ActivePack;
-            PlayerCardsFile under = GameDataStore != null ? GameDataStore.LoadCards(GameId) : null;
+            PlayerCardsFile under = UsesGameData ? GameDataStore.LoadCards(GameId) : null;
             if (pack != null) under = PlayerCardsFile.Merge(under, pack.Manifest.cards);
             return PlayerCardsFile.Merge(under, Store.LoadCards(GameId));
         }
@@ -85,7 +88,7 @@ namespace ConsoleCards.Presentation.Content
         {
             if (!HasGame) return new PlayerDecksFile();
             ContentPackInfo pack = ActivePack;
-            PlayerDecksFile under = GameDataStore != null ? GameDataStore.LoadDecks(GameId) : null;
+            PlayerDecksFile under = UsesGameData ? GameDataStore.LoadDecks(GameId) : null;
             if (pack != null) under = PlayerDecksFile.Merge(under, pack.Manifest.decks);
             return PlayerDecksFile.Merge(under, Store.LoadDecks(GameId));
         }
@@ -380,7 +383,7 @@ namespace ConsoleCards.Presentation.Content
         private void LoadGameDataLayer()
         {
             Library.ClearLayer(ArtLayer.GameData);
-            if (GameDataStore == null) return;
+            if (!UsesGameData) return;
             ContentUploadIndex own = GameDataStore.LoadUploads(GameId);
             string folder = GameDataStore.UploadsFolder(GameId);
             for (int i = own.pictures.Count - 1; i >= 0; i--)

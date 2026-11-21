@@ -35,6 +35,8 @@ namespace ConsoleCards.Presentation.Composition
             public PlayerDeckRecord Deck;
             // The game whose cards the deck uses (doc 29, L2-6b).
             public GameDefinition Game;
+            // Doc 63: one part of a deck in parts (Id is then the part's ID); empty for a whole deck.
+            public string PartId = string.Empty;
         }
 
         internal sealed class GameSelectEntry

@@ -69,7 +69,7 @@ namespace ConsoleCards.Editor.UI
                 UiLayer.Modal, UiRetention.CachedSingleInstance);
         }
 
-        private const string EditorsLabel = "BoardEditors8"; // 8: THE PICTURE IS: the whole card / in the game frame (2026-11-21)
+        private const string EditorsLabel = "BoardEditors9"; // 9: doc 63 SPLIT INTO PARTS / + ADD PART in Decks (2026-11-21)
 
         // A prefab this builder made before its current version (no label) is made again once; one with the label is
         // kept (it may have been edited).
@@ -525,7 +525,10 @@ namespace ConsoleCards.Editor.UI
             // YOUR DECKS
             RectTransform left = Box10(root, "Decks", 24, 92, 250, 536, EdPane, Edge);
             Txt(left, "Title", 12, 12, 226, 16, bold, 11, Muted, TextAnchor.MiddleLeft, "YOUR DECKS");
-            ScrollRect deckScroll = Scroll10(left, "List", 12, 36, 226, 350, 8f, out RectTransform deckRows);
+            ScrollRect deckScroll = Scroll10(left, "List", 12, 36, 226, 306, 8f, out RectTransform deckRows);
+            // Doc 63: a deck is one deck by default; parts are an option per deck.
+            Button splitParts = Btn(left, "SplitParts", 12, 350, 136, 36, "SPLIT INTO PARTS", 11, EdBar, Edge, Words, out Text splitPartsLabel);
+            Button addPart = Btn(left, "AddPart", 154, 350, 84, 36, "+ ADD PART", 11);
             Button delete = Btn(left, "Delete", 12, 394, 226, 34, "DELETE THIS DECK", 12, EdBar, Edge, EdRed);
             Button copy = Btn(left, "Copy", 12, 436, 226, 40, "COPY THIS DECK", 12);
             Button newDeck = Btn(left, "NewDeck", 12, 482, 226, 44, "+ NEW DECK", 13, EdBar, Edge, Cyan);
@@ -614,6 +617,9 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("changeBackButton").objectReferenceValue = changeBack;
             so.FindProperty("shuffleTestButton").objectReferenceValue = shuffle;
             so.FindProperty("doneButton").objectReferenceValue = done;
+            so.FindProperty("splitPartsButton").objectReferenceValue = splitParts;
+            so.FindProperty("splitPartsLabel").objectReferenceValue = splitPartsLabel;
+            so.FindProperty("addPartButton").objectReferenceValue = addPart;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

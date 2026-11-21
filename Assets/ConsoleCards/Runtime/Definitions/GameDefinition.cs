@@ -20,6 +20,18 @@ namespace ConsoleCards.Definitions
         [Tooltip("Each draw picks from the whole set again, so a card can appear more often than its quantity.")]
         [SerializeField] private bool allowRepeats;
 
+        public GameContentSet()
+        {
+        }
+
+        /// <summary>Doc 63 (owner, 2026-11-21): a set made at runtime (the "Your cards" library's plain card).</summary>
+        public GameContentSet(string stableId, string displayName, List<CardDefinition> cards)
+        {
+            this.stableId = stableId ?? string.Empty;
+            this.displayName = displayName ?? string.Empty;
+            this.cards = cards ?? new List<CardDefinition>();
+        }
+
         public string StableId => stableId;
         public string DisplayName => displayName;
         public IReadOnlyList<CardDefinition> Cards => cards;
@@ -129,6 +141,25 @@ namespace ConsoleCards.Definitions
         public bool AllowsPlayerDecks => allowsPlayerDecks;
         public bool AllowsStages => allowsStages;
         public IReadOnlyList<GameContentSet> ContentSets => contentSets;
+
+        /// <summary>
+        /// Doc 63 (owner, 2026-11-21): a game made at runtime for the "Your cards" library: an ID, a name and one set
+        /// of cards, own decks allowed, no stages, the platform's default frame style. It is never played as a game
+        /// (no play area or Consoles); the card studio and the deck builder use it. Destroy it when done.
+        /// </summary>
+        public static GameDefinition CreateRuntime(string stableId, string displayName, GameContentSet contentSet)
+        {
+            GameDefinition game = CreateInstance<GameDefinition>();
+            game.hideFlags = HideFlags.DontSave;
+            game.name = displayName ?? stableId ?? "Game";
+            game.stableId = stableId ?? string.Empty;
+            game.displayName = displayName ?? string.Empty;
+            game.contentSets = new List<GameContentSet>();
+            if (contentSet != null) game.contentSets.Add(contentSet);
+            game.allowsPlayerDecks = true;
+            game.allowsStages = false;
+            return game;
+        }
 
         /// <summary>The game's own frame style, else the platform's default (null when neither exists).</summary>
         public CardFrameStyle CardFrameStyle => cardFrameStyle != null ? cardFrameStyle : CardFrameStyle.Default;

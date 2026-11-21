@@ -10,7 +10,8 @@
             "cards": [],
             "stage": 1,
             "backArtKey": "",
-            "fronts": []
+            "fronts": [],
+            "parts": []
         },
         {
             "id": "860ed754-f0a2-4c67-ab99-f43e7c50dc2a",
@@ -20,9 +21,11 @@
             "cards": [],
             "stage": 2,
             "backArtKey": "",
-            "fronts": []
+            "fronts": [],
+            "parts": []
         }
     ],
     "gameDeckMinimum": 0,
-    "gameDeckMaximum": 0
+    "gameDeckMaximum": 0,
+    "ruleValues": []
 }

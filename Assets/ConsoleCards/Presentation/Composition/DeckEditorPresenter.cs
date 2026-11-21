@@ -161,15 +161,20 @@ namespace ConsoleCards.Presentation.Composition
                     SetRange = SetDeckEditorRange,
                     ChangeBack = ChangeDeckEditorBack,
                     ExtraButton = ImportStageFronts,
+                    ToggleParts = ToggleEditorDeckParts, // doc 63
+                    AddPart = AddEditorDeckPart,
                 };
             }
 
             string gameName = host.CardEditorPanel.editorGame.DisplayName ?? string.Empty;
             PlayerDeckRecord deck = FindEditorDeck(deckEditorSelectedId);
             if (deck == null) deckEditorSelectedId = CardEditorPresenter.GameDeckId;
+            PlayerDeckPart part = FindEditorPart(deckEditorSelectedId, out _); // doc 63: a part of a deck
+            bool library = host.CardEditorPanel.EditingLibrary;
             bool isGameDeck = deck == null;
             bool isStage = deck != null && deck.stage > 0; // STAGES-1
-            string deckName = isGameDeck ? $"{gameName} deck" : isStage ? StageTitle(deck) : DeckName(deck);
+            string deckName = isGameDeck ? (library ? "All your cards" : $"{gameName} deck")
+                : isStage ? StageTitle(deck) : part != null ? PartName(part) : DeckName(deck);
 
             List<DeckEditorCard> cards = DeckEditorCards();
             List<DeckEditorCardRowModel> rows = new List<DeckEditorCardRowModel>(cards.Count + 12);
@@ -194,9 +199,15 @@ namespace ConsoleCards.Presentation.Composition
                     ? "Not saved yet: the decks could not be written."
                     : isStage
                         ? StageText(deck)
+                    : isGameDeck && library
+                        ? "All your cards, with each card's copies. Make decks of them with + NEW DECK."
                     : isGameDeck
                         ? "The game's own deck: these copies are used in play from the next table you start."
-                        : "Your deck. Games will use your decks in a later step (L2-5).";
+                    : part != null
+                        ? $"{PartName(part)}, a part of {DeckName(deck)}: its cards are its own. The whole deck is every part together."
+                    : deck.HasParts
+                        ? $"{DeckName(deck)} in parts: the whole deck is every part together; + adds to the first part with the card."
+                        : "Your deck: one deck for the whole game. SPLIT INTO PARTS gives it parts (stages, floors) of its own.";
             }
 
             DeckEditorModel model = new DeckEditorModel
@@ -208,6 +219,9 @@ namespace ConsoleCards.Presentation.Composition
                 CanRename = !isGameDeck,
                 ExtraButtonText = string.Empty,
                 CanDelete = !isGameDeck,
+                CanSplit = deck != null && !isStage, // doc 63
+                SplitText = deck != null && deck.HasParts ? "ONE DECK" : "SPLIT INTO PARTS",
+                CanAddPart = deck != null && deck.HasParts,
                 Summary = $"{deckName.ToUpperInvariant()} · {total} CARD{(total == 1 ? string.Empty : "S")} · {different} DIFFERENT",
                 FilterText = deckEditorShowAll ? "Show: all cards" : "Show: this deck only",
                 Cards = rows,
@@ -224,17 +238,23 @@ namespace ConsoleCards.Presentation.Composition
 
         internal List<CardEditorRowModel> BuildDeckEditorDeckRows(string gameName, List<DeckEditorCard> cards)
         {
+            // Doc 63: in "Your cards" the decks are top-level, beside All your cards.
+            bool library = host.CardEditorPanel.EditingLibrary;
+            int deckDepth = library ? 0 : 1;
             List<CardEditorRowModel> rows = new List<CardEditorRowModel>(1 + host.CardEditorPanel.editorDecks.decks.Count)
             {
                 // DECKTREE-1 (owner, 2026-11-02): the game is the parent; its stages and your decks sit under it.
-                DeckRow(CardEditorPresenter.GameDeckId, gameName, "The game and its deck", AllDeckEditorCards()),
+                library
+                    ? DeckRow(CardEditorPresenter.GameDeckId, "All your cards", "Every card of yours", AllDeckEditorCards())
+                    : DeckRow(CardEditorPresenter.GameDeckId, gameName, "The game and its deck", AllDeckEditorCards()),
             };
             AddStageRows(rows); // STAGES-1
             for (int d = 0; d < host.CardEditorPanel.editorDecks.decks.Count; d++)
             {
                 PlayerDeckRecord deck = host.CardEditorPanel.editorDecks.decks[d];
                 if (deck == null || string.IsNullOrWhiteSpace(deck.id) || deck.stage > 0) continue;
-                rows.Add(DeckRow(deck.id, DeckName(deck), "Your deck", AllDeckEditorCards(), 1));
+                rows.Add(DeckRow(deck.id, DeckName(deck), deck.HasParts ? "Your deck in parts" : "Your deck", AllDeckEditorCards(), deckDepth));
+                AddPartRows(rows, deck, deckDepth + 1); // doc 63: its parts under it
             }
 
             return CardEditorRowModel.AsTree(rows); // DECKTREE-2: the tree's lines
@@ -272,7 +292,7 @@ namespace ConsoleCards.Presentation.Composition
             ContentArtService previous = host.CardEditorPanel.UseEditorGame(next);
             deckEditorSelectedId = CardEditorPresenter.GameDeckId;
             TakeDeckEditorSnapshot();
-            ShowDeckEditor($"Now showing {next.DisplayName}'s decks.");
+            ShowDeckEditor(PlayerLibrary.IsLibrary(next) ? "Now showing your own decks (Your cards)." : $"Now showing {next.DisplayName}'s decks.");
             previous?.Dispose();
         }
 
@@ -353,6 +373,15 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            PlayerDeckPart part = FindEditorPart(deckEditorSelectedId, out _); // doc 63: renaming a part
+            if (part != null)
+            {
+                part.name = name;
+                deckEditorChanged = true;
+                ShowDeckEditor($"The part is now called {name}.");
+                return;
+            }
+
             deck.name = name;
             deckEditorChanged = true;
             ShowDeckEditor($"The deck is now called {name}.");
@@ -360,6 +389,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void DeleteEditorDeck()
         {
+            if (TryDeleteEditorPart()) return; // doc 63
             PlayerDeckRecord deck = FindEditorDeck(deckEditorSelectedId);
             if (deck == null) return;
             host.CardEditorPanel.editorDecks.decks.Remove(deck);
@@ -440,6 +470,7 @@ namespace ConsoleCards.Presentation.Composition
             deckEditorCloseArmed = false;
             host.runtimeUi?.CloseDeckEditor();
             host.CardEditorPanel.DisposeCardEditor();
+            host.RefreshLibraryLook(); // doc 63
             host.GameSelectPanel.ReturnToGameSelect();
         }
 
@@ -477,6 +508,8 @@ namespace ConsoleCards.Presentation.Composition
                 return change != null && change.changeQuantity ? change.quantity : card.GameCard.Quantity;
             }
 
+            PlayerDeckPart part = FindEditorPart(deckId, out _); // doc 63: a part counts its own cards
+            if (part != null) return part.CopiesOf(card.Id);
             PlayerDeckRecord deck = FindEditorDeck(deckId);
             return deck != null ? CardEditorPresenter.SavedDeckCopies(deck, card.Id) : 0;
         }
@@ -513,10 +546,17 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            PlayerDeckPart part = FindEditorPart(deckId, out PlayerDeckRecord owner); // doc 63
+            if (part != null)
+            {
+                part.SetCopies(card.Id, copies);
+                owner.SumParts();
+                return;
+            }
+
             PlayerDeckRecord deck = FindEditorDeck(deckId);
             if (deck == null) return;
-            deck.cards.RemoveAll(entry => entry != null && string.Equals(entry.cardId, card.Id, StringComparison.OrdinalIgnoreCase));
-            if (copies > 0) deck.cards.Add(new PlayerDeckEntry { cardId = card.Id, count = copies });
+            deck.SetWholeCopies(card.Id, copies);
         }
 
         // ---------- how a card shows ----------
@@ -535,8 +575,9 @@ namespace ConsoleCards.Presentation.Composition
                 return $"{(host.CardEditorPanel.FindEditorChange(card.GameCard.StableId) != null ? "Changed game card" : "Game card")} · {card.GameCard.Category}";
             }
 
-            CardDefinition model = host.CardEditorPanel.FindEditorGameCard(card.Record.behavesLike);
+            CardDefinition model = host.CardEditorPanel.FindEditorModel(card.Record.behavesLike);
             string code = string.IsNullOrWhiteSpace(card.Record.code) ? string.Empty : $"{card.Record.code} · ";
+            if (host.CardEditorPanel.EditingLibrary) return $"{code}Your card"; // doc 63: a plain card
             return $"{code}Your card · works like {(model != null ? model.DisplayName : "?")}";
         }
 
@@ -544,7 +585,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (card.Record != null)
             {
-                return host.CardEditorPanel.DraftPicture(host.CardEditorPanel.FrontKeyOf(card.Record), host.CardEditorPanel.FindEditorGameCard(card.Record.behavesLike), true);
+                return host.CardEditorPanel.DraftPicture(host.CardEditorPanel.FrontKeyOf(card.Record), host.CardEditorPanel.FindEditorModel(card.Record.behavesLike), true);
             }
 
             CardChangeRecord change = host.CardEditorPanel.FindEditorChange(card.GameCard.StableId);
@@ -561,7 +602,8 @@ namespace ConsoleCards.Presentation.Composition
                 if (deck != null && string.Equals(deck.id, deckId, StringComparison.OrdinalIgnoreCase)) return deck;
             }
 
-            return null;
+            // Doc 63: a part's ID finds the deck it is part of.
+            return FindEditorPart(deckId, out PlayerDeckRecord owner) != null ? owner : null;
         }
 
         internal static string DeckName(PlayerDeckRecord deck) => string.IsNullOrWhiteSpace(deck.name) ? "My deck" : deck.name;

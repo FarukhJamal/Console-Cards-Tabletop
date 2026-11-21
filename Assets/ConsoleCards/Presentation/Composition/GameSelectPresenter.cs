@@ -509,6 +509,7 @@ namespace ConsoleCards.Presentation.Composition
             for (int g = 0; g < host.CardEditorPanel.editorGames.Count; g++)
             {
                 GameDefinition game = host.CardEditorPanel.editorGames[g];
+                if (PlayerLibrary.IsLibrary(game)) continue; // doc 63: "Your cards" is a library, not a game to play
                 GameSelectEntry entry = new GameSelectEntry
                 {
                     Id = game.StableId ?? game.name,
@@ -668,7 +669,9 @@ namespace ConsoleCards.Presentation.Composition
         internal ContentArtServiceScope ArtFor(GameDefinition game)
         {
             if (host.UsesTableArt(game)) return new ContentArtServiceScope(host.contentArt, false);
-            ContentArtService art = new ContentArtService(ContentPackStore.ForCards(host.EnsureProfile()));
+            ContentArtService art = new ContentArtService(PlayerLibrary.IsLibrary(game)
+                ? ContentPackStore.ForLibrary(host.EnsureProfile(), false) // doc 63: always the profile (or the host's)
+                : ContentPackStore.ForCards(host.EnsureProfile()));
             art.UseGame(game);
             return new ContentArtServiceScope(art, true);
         }
@@ -936,12 +939,17 @@ namespace ConsoleCards.Presentation.Composition
             return choices;
         }
 
-        internal void AddDeckChoices(List<DeckChoice> choices, GameDefinition game, bool withGameName)
+        // Doc 63: "Your cards" decks keep their plain names; withParts also offers each part of a deck in parts.
+        internal void AddDeckChoices(List<DeckChoice> choices, GameDefinition game, bool withGameName, bool withParts = false)
         {
-            ContentArtServiceScope scope = ArtFor(game);
+            bool library = PlayerLibrary.IsLibrary(game);
+            // Doc 63: "Your cards" decks are read straight from the store (no pictures to load for a list).
+            ContentArtServiceScope scope = library ? default : ArtFor(game);
             try
             {
-                PlayerDecksFile decks = scope.Art.Store.LoadDecks(scope.Art.GameId);
+                PlayerDecksFile decks = library
+                    ? ContentPackStore.ForLibrary(host.EnsureProfile(), false).LoadDecks(PlayerLibrary.Id)
+                    : scope.Art.Store.LoadDecks(scope.Art.GameId);
                 for (int d = 0; d < decks.decks.Count; d++)
                 {
                     PlayerDeckRecord deck = decks.decks[d];
@@ -949,14 +957,30 @@ namespace ConsoleCards.Presentation.Composition
                     int cards = 0;
                     for (int i = 0; i < deck.cards.Count; i++) cards += deck.cards[i] != null ? Math.Max(0, deck.cards[i].count) : 0;
                     string name = string.IsNullOrWhiteSpace(deck.name) ? "My deck" : deck.name;
+                    string shown = withGameName && !library ? $"{name} ({game.DisplayName})" : name;
                     choices.Add(new DeckChoice
                     {
                         Id = deck.id,
-                        Name = withGameName ? $"{name} ({game.DisplayName})" : name,
+                        Name = shown,
                         Cards = cards,
                         Deck = deck,
                         Game = game,
                     });
+                    for (int p = 0; withParts && deck.HasParts && p < deck.parts.Count; p++)
+                    {
+                        PlayerDeckPart part = deck.parts[p];
+                        if (part == null || string.IsNullOrWhiteSpace(part.id)) continue;
+                        string partName = string.IsNullOrWhiteSpace(part.name) ? "Part" : part.name;
+                        choices.Add(new DeckChoice
+                        {
+                            Id = part.id, // a part's ID is unique in the game's decks, as a deck's is
+                            Name = withGameName && !library ? $"{name} › {partName} ({game.DisplayName})" : $"{name} › {partName}",
+                            Cards = part.Total,
+                            Deck = deck,
+                            Game = game,
+                            PartId = part.id,
+                        });
+                    }
                 }
             }
             finally

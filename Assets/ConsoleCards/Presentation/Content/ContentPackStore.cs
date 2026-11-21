@@ -84,6 +84,7 @@ namespace ConsoleCards.Presentation.Content
                 if (string.IsNullOrEmpty(profileGames) || !Directory.Exists(profileGames)) return;
                 foreach (string from in Directory.GetDirectories(profileGames))
                 {
+                    if (PlayerLibrary.IsLibrary(Path.GetFileName(from))) continue; // doc 63: "Your cards" stays in the profile
                     string to = Path.Combine(RootFolder, Path.GetFileName(from));
                     string fromCards = Path.Combine(from, PlayerCardsFile.FileName);
                     string fromDecks = Path.Combine(from, PlayerDecksFile.FileName);
@@ -132,6 +133,20 @@ namespace ConsoleCards.Presentation.Content
             {
                 RoomRoot = room;
             }
+        }
+
+        /// <summary>
+        /// Doc 63 (owner, 2026-11-21): where "Your cards" (<see cref="PlayerLibrary"/>) is kept: always the player's
+        /// profile, in the Unity editor too (never the project's GameData, so never in git). Outside your own edits
+        /// (<paramref name="ownEdits"/> false) a guest in someone else's room reads the host's copy, as
+        /// <see cref="ForProfile"/>.
+        /// </summary>
+        public static ContentPackStore ForLibrary(ProfileService profiles, bool ownEdits)
+        {
+            if (!ownEdits && !string.IsNullOrEmpty(RoomRoot)) return new ContentPackStore(RoomRoot);
+            if (profiles == null) throw new ArgumentNullException(nameof(profiles));
+            profiles.EnsureActive();
+            return new ContentPackStore(profiles.GamesFolder);
         }
 
         /// <summary>The game saves of the active profile (or of the online room, see <see cref="RoomRoot"/>).</summary>

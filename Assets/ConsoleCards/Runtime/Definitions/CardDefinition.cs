@@ -248,6 +248,45 @@ namespace ConsoleCards.Definitions
             return card;
         }
 
+        /// <summary>
+        /// Doc 63 (owner, 2026-11-21): the plain card "Your cards" are made from. It borrows only the look of
+        /// <paramref name="look"/> (its back picture, orientation and face); it has no category rules, tags, effect,
+        /// cost, Console behaviour, symbol or controller input, and plays at the standard size. Null look: a blank card.
+        /// Not saved as an asset; destroy it when it is no longer used.
+        /// </summary>
+        public static CardDefinition CreatePlain(CardDefinition look, string stableId, string displayName, string frontArtworkReference)
+        {
+            if (string.IsNullOrWhiteSpace(stableId)) throw new ArgumentException("A card needs an ID.", nameof(stableId));
+            CardDefinition card = CreateInstance<CardDefinition>();
+            card.hideFlags = HideFlags.DontSave;
+            card.stableId = stableId;
+            card.name = displayName ?? stableId;
+            card.displayName = displayName ?? stableId;
+            card.category = "Card";
+            card.description = string.Empty;
+            card.frontArtworkReference = frontArtworkReference ?? string.Empty;
+            card.frontArtwork = null;
+            card.backArtworkReference = look != null ? look.backArtworkReference ?? string.Empty : string.Empty;
+            card.backArtwork = look != null ? look.backArtwork : null;
+            card.quantity = 0;
+            card.inputCost = new InputCostDefinition();
+            card.orientation = look != null ? look.orientation : default;
+            card.defaultFace = look != null ? look.defaultFace : CardFace.FaceUp;
+            card.preferredConsolePlacement = string.Empty;
+            card.consoleBehavior = ConsoleCardBehavior.None;
+            card.tags = new List<string>();
+            card.effectMetadata = string.Empty;
+            card.objectiveMetadata = string.Empty;
+            card.representsControllerInput = false;
+            card.representedControllerInput = default;
+            card.sizeClass = CardSizeClass.Standard;
+            card.consoleSymbol = ConsoleSymbol.None;
+            card.frameVariant = string.Empty;
+            card.wholeCard = false;
+            card.edgeSymbols = new ConsoleSymbol[EdgeIconCount];
+            return card;
+        }
+
         public CardDefinitionData ToData()
         {
             return new CardDefinitionData(
