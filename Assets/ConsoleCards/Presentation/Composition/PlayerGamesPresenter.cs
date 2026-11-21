@@ -131,6 +131,7 @@ namespace ConsoleCards.Presentation.Composition
             saveCoverPicture = from != null ? from.coverPicture ?? string.Empty : string.Empty;
             // Doc 63 G2: a table laid out from a count's own layout saves back to that layout.
             saveLayoutPlayers = from != null && activeLayoutPlayers > 0 && from.LayoutFor(activeLayoutPlayers) != null ? activeLayoutPlayers : 0;
+            AskForGuideIfNew(); // doc 63 H1 (owner, 2026-11-22): the guide, the first time only
             ShowGameSave(string.Empty);
         }
 
@@ -156,6 +157,7 @@ namespace ConsoleCards.Presentation.Composition
                     CycleLayout = CycleSaveLayout, // doc 63 G2
                     ClearLayout = ClearSaveLayout,
                     TestOnTable = TestOnTable, // doc 63 M1
+                    GuideDone = GuideDone, // doc 63 H1
                 };
             }
 
@@ -185,6 +187,7 @@ namespace ConsoleCards.Presentation.Composition
             };
             FillSaveStep(model, deck, deckOnTable);
             FillBoardParts(model, table, deck, deckOnTable); // board 13
+            model.ShowGuide = TakeGuideRequest(); // doc 63 H1
             if (!host.runtimeUi.ShowGameSave(model, gameSaveActions))
             {
                 host.ShowMessage("The Save table as a game panel is missing: run Console Cards > UI > Create Missing Gameplay UI Prefabs.");

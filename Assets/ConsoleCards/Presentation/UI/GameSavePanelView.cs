@@ -50,6 +50,9 @@ namespace ConsoleCards.Presentation.UI
         // Doc 63 G2 (owner, 2026-11-21): LAYOUT FOR on SAVE (all player counts, or one count) and CLEAR.
         public string LayoutText = string.Empty;
         public bool CanClearLayout;
+
+        // Doc 63 H1 (owner, 2026-11-22): open the Make a game guide now (the first time only).
+        public bool ShowGuide;
     }
 
     /// <summary>One line of WHAT GETS SAVED: "Decks" · "2 decks".</summary>
@@ -106,6 +109,9 @@ namespace ConsoleCards.Presentation.UI
 
         /// <summary>Doc 63 M1 (owner, 2026-11-21): TEST ON TABLE hides the panel and shows the live table.</summary>
         public Action<GameSaveTyped> TestOnTable;
+
+        /// <summary>Doc 63 H1 (owner, 2026-11-22): the guide was finished or skipped (it is then not shown by itself again).</summary>
+        public Action GuideDone;
     }
 
     /// <summary>
@@ -200,6 +206,7 @@ namespace ConsoleCards.Presentation.UI
             statusLabel.text = model.Status;
             BindSteps(model);
             BindBoard(model); // board 13: the rules list, the preview, WHAT GETS SAVED, the step marks, ABOUT
+            BindGuide(model); // doc 63 H1 (owner, 2026-11-22)
 
             dismissOverlayButton.onClick.AddListener(HandleClose);
             closeButton.onClick.AddListener(HandleClose);
@@ -268,6 +275,7 @@ namespace ConsoleCards.Presentation.UI
         public override void Unbind()
         {
             UnbindBoard();
+            UnbindGuide(); // doc 63 H1
             RemoveListeners();
             actions = null;
         }

@@ -151,6 +151,15 @@ namespace ConsoleCards.Presentation.Hints
             if (hint != null && !IsEveryTimeReminder(hint)) seen.RecordDismissed(hint.StableId);
         }
 
+        // Doc 63 H1 (owner, 2026-11-22): a walkthrough shown once (the Make a game guide), kept in the same seen file.
+        // Replaying it changes nothing here, so the other hints stay as they are.
+        public bool IsWalkthroughSeen(string id) => !string.IsNullOrEmpty(id) && !seen.CanShow(id, 0);
+
+        public void MarkWalkthroughSeen(string id)
+        {
+            if (!string.IsNullOrEmpty(id) && !IsWalkthroughSeen(id)) seen.RecordDismissed(id);
+        }
+
         private IGameHintHelper FindHelper(string helperId)
         {
             for (int i = 0; i < helpers.Count; i++)

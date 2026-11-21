@@ -20,7 +20,7 @@ namespace ConsoleCards.Editor.UI
     {
         public const string MakeGamePath = Folder + "MakeGamePanel.prefab";
         public const string MakeGameTestBarPath = Folder + "MakeGameTestBar.prefab"; // doc 63 M1
-        private const string MakeGameLabel = "MakeGameBoard13i"; // i: a screen of its own, TEST ON TABLE (doc 63 M1 (owner, 2026-11-21)) // h: the template note keeps your cards (doc 63 T1 (owner, 2026-11-21)) // g: LAYOUT FOR a player count (doc 63 G2, 2026-11-21) // f: COVER PICTURE… (doc 63 G1, 2026-11-21) // e: SAVE AS TEMPLATE (RULES-SHEET R5) // d: four step helps // c: the RULES step (RULES-SHEET R2, 2026-11-20) // b: the done steps' tick
+        private const string MakeGameLabel = "MakeGameBoard13j"; // j: the GUIDE and its cards (doc 63 H1 (owner, 2026-11-22)) // i: a screen of its own, TEST ON TABLE (doc 63 M1 (owner, 2026-11-21)) // h: the template note keeps your cards (doc 63 T1 (owner, 2026-11-21)) // g: LAYOUT FOR a player count (doc 63 G2, 2026-11-21) // f: COVER PICTURE… (doc 63 G1, 2026-11-21) // e: SAVE AS TEMPLATE (RULES-SHEET R5) // d: four step helps // c: the RULES step (RULES-SHEET R2, 2026-11-20) // b: the done steps' tick
 
         private static readonly Color Teal13 = UiKit.Hex("138a8c");
         private static readonly Color Green13 = UiKit.Hex("2fd46b");
@@ -135,9 +135,11 @@ namespace ConsoleCards.Editor.UI
             }
 
             // Doc 63 M1: TEST ON TABLE lays the game out on the table to try it; BACK TO GAME SETUP comes back here.
-            Text note = B.TextAt(bar, "Note", 800, 0, 222, 60, B.medium, 11, B.Muted, TextAnchor.MiddleRight,
-                "Set up your game, then TEST ON TABLE to lay it out and try it");
+            Text note = B.TextAt(bar, "Note", 800, 0, 168, 60, B.medium, 11, B.Muted, TextAnchor.MiddleRight,
+                "Set up your game, then TEST ON TABLE to try it");
             note.horizontalOverflow = HorizontalWrapMode.Wrap;
+            // Doc 63 H1 (owner, 2026-11-22): GUIDE plays the step-by-step guide again.
+            Button guideButton = B.SmallButton(bar, "Guide", 974, 12, 50, 36, "GUIDE", B.Cyan, B.Cyan);
             Button testOnTable = B.SmallButton(bar, "TestOnTable", 1030, 12, 132, 36, "TEST ON TABLE", B.Cyan, B.Cyan);
             Button exit = B.SmallButton(bar, "Exit", 1170, 12, 57, 36, "EXIT", B.Edge, B.Words);
 
@@ -249,6 +251,46 @@ namespace ConsoleCards.Editor.UI
             Button cancel = B.SmallButton(root, "Cancel", 0, 0, 10, 10, string.Empty, B.Edge, B.Words);
             cancel.gameObject.SetActive(false);
 
+            // ---------- doc 63 H1 (owner, 2026-11-22): the Make a game guide, over everything ----------
+            RectTransform guide = Rect("Guide", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            Image guideBlock = guide.gameObject.AddComponent<Image>();
+            guideBlock.color = new Color(0f, 0f, 0f, 0f); // takes every press while the guide is open
+            guideBlock.raycastTarget = true;
+            // Dimmed below the top bar, so the step a card talks about stays bright there.
+            RectTransform guideDim = Rect("Dim", guide, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            guideDim.offsetMin = Vector2.zero;
+            guideDim.offsetMax = new Vector2(0f, -84f * 1.5f);
+            Image guideDimImage = guideDim.gameObject.AddComponent<Image>();
+            guideDimImage.color = new Color(0.04f, 0.05f, 0.05f, 0.75f);
+            guideDimImage.raycastTarget = false;
+            RectTransform guideCard = B.Box(guide, "Card", 320, 220, 640, 300, B.Panel, B.Cyan, 1f);
+            B.Stripe(guideCard, 18, 20, 8, 44);
+            Text guideCount = B.TextAt(guideCard, "Count", 36, 18, 400, 18, B.bold, 11, B.Muted, TextAnchor.MiddleLeft, "STEP 1 OF 9");
+            Text guideTitle = B.TextAt(guideCard, "Title", 36, 38, 580, 28, B.bold, 18, B.Words, TextAnchor.MiddleLeft,
+                "WELCOME TO MAKE A GAME");
+            Text guideText = B.TextAt(guideCard, "Text", 36, 78, 570, 150, B.medium, 14, B.Soft, TextAnchor.UpperLeft, string.Empty);
+            guideText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            Button guideSkip = B.SmallButton(guideCard, "Skip", 36, 244, 120, 36, "SKIP GUIDE", B.Edge, B.Muted);
+            Button guideBack = Pill13(guideCard, "Back", 364, 240, 120, 44, "BACK", B.Well, B.Words, out _);
+            Button guideNext = Pill13(guideCard, "Next", 496, 240, 120, 44, "NEXT", Teal13, B.Words, out Text guideNextLabel);
+            // The frame around the control a card talks about; the view moves it into that control.
+            RectTransform guideFrame = Rect("GuideFrame", guide, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+                new Vector2(12f, 12f));
+            GuideEdge13(guideFrame, "Top", new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 3f));
+            GuideEdge13(guideFrame, "Bottom", new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 3f));
+            GuideEdge13(guideFrame, "Left", new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(3f, 0f));
+            GuideEdge13(guideFrame, "Right", new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(3f, 0f));
+            guideFrame.gameObject.SetActive(false);
+            guide.gameObject.SetActive(false);
+            // In the view's card order: welcome, START FROM, TEST ON TABLE, the five steps, play it (GUIDE).
+            RectTransform[] guideTargets =
+            {
+                null, null, (RectTransform)testOnTable.transform,
+                (RectTransform)stepButtons[0].transform, (RectTransform)stepButtons[1].transform,
+                (RectTransform)stepButtons[2].transform, (RectTransform)stepButtons[3].transform,
+                (RectTransform)stepButtons[4].transform, (RectTransform)guideButton.transform,
+            };
+
             SerializedObject so = new SerializedObject(view);
             so.FindProperty("dismissOverlayButton").objectReferenceValue = dismiss;
             so.FindProperty("closeButton").objectReferenceValue = exit;
@@ -313,6 +355,17 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("nextLayoutButton").objectReferenceValue = nextLayout;
             so.FindProperty("clearLayoutButton").objectReferenceValue = clearLayout;
             so.FindProperty("testOnTableButton").objectReferenceValue = testOnTable; // doc 63 M1
+            so.FindProperty("guideButton").objectReferenceValue = guideButton; // doc 63 H1
+            so.FindProperty("guideOverlay").objectReferenceValue = guide.gameObject;
+            so.FindProperty("guideCountLabel").objectReferenceValue = guideCount;
+            so.FindProperty("guideTitleLabel").objectReferenceValue = guideTitle;
+            so.FindProperty("guideTextLabel").objectReferenceValue = guideText;
+            so.FindProperty("guideBackButton").objectReferenceValue = guideBack;
+            so.FindProperty("guideNextButton").objectReferenceValue = guideNext;
+            so.FindProperty("guideNextLabel").objectReferenceValue = guideNextLabel;
+            so.FindProperty("guideSkipButton").objectReferenceValue = guideSkip;
+            so.FindProperty("guideFrame").objectReferenceValue = guideFrame;
+            SetArray(so.FindProperty("guideTargets"), guideTargets);
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -385,6 +438,15 @@ namespace ConsoleCards.Editor.UI
             button.targetGraphic = rect.GetComponent<Image>();
             label = B.TextAt(rect, "Label", 0, 0, width, height, B.bold, 14, colour, TextAnchor.MiddleCenter, words);
             return button;
+        }
+
+        // Doc 63 H1: one side of the guide's frame, stretched along it.
+        private static void GuideEdge13(RectTransform frame, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 size)
+        {
+            Image image = Rect(name, frame, anchorMin, anchorMax, new Vector2(0.5f, 0.5f), Vector2.zero, size)
+                .gameObject.AddComponent<Image>();
+            image.color = B.Cyan;
+            image.raycastTarget = false;
         }
 
         private static void StepHelp13(Transform parent, float x, string title, string text, float width = 190f)

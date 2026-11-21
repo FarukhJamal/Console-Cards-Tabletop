@@ -53,7 +53,7 @@ namespace ConsoleCards.Editor.UI
         {
             Prepare();
             int built = 0;
-            if (Rebuild("FE_Create", 2, BuildCreate)) built++; // 2: START FROM in MAKE A GAME (doc 63 T1 (owner, 2026-11-21))
+            if (Rebuild("FE_Create", 3, BuildCreate)) built++; // 3: the guide note (doc 63 H1 (owner, 2026-11-22)) // 2: START FROM in MAKE A GAME (doc 63 T1 (owner, 2026-11-21))
             if (Rebuild("FE_TopBar", 3, BuildTopBar)) built++; // 2: PROFILE-2, the avatar chip; 3: the switch list // boards 1–3 (BoardScreensBuilder.Flow.cs)
             if (Rebuild("FE_Profile", 1, BuildProfileBoard)) built++; // PROFILE-2: board 19
             if (Rebuild("FE_MainMenu", 3, BuildHome)) built++; // 2: BRAND-1, the logo as the title; 3: 540 x 270
@@ -152,6 +152,9 @@ namespace ConsoleCards.Editor.UI
             well.GetComponent<Image>().raycastTarget = false;
             TextAt(fromRow, "Label", 134, 0, 300, 30, bold, 13, Words, TextAnchor.MiddleCenter, "Empty table");
             SmallButton(fromRow, "Next", 438, 0, 30, 30, "›", Edge, Cyan);
+            // Doc 63 H1 (owner, 2026-11-22): where the step-by-step guide is.
+            TextAt(page, "GuideNote", 52, 344, 716, 16, medium, 11, Muted, TextAnchor.MiddleLeft,
+                "New here? MAKE A GAME opens with a short guide; GUIDE in its top bar shows it again.");
 
             // The editors.
             RectTransform tiles = Rect(page, "Tiles", 48, 364, 720, 150);
