@@ -35,6 +35,7 @@ using ConsoleCards.Presentation.Hints;
 using ConsoleCards.Presentation.Input;
 using ConsoleCards.Presentation.Interaction;
 using ConsoleCards.Presentation.Settings;
+using ConsoleCards.Presentation.TableSurface;
 using ConsoleCards.Presentation.UI.Toolbox;
 using ConsoleCards.Presentation.Views;
 using ConsoleCards.Presentation.Views.Containers;
@@ -116,6 +117,8 @@ namespace ConsoleCards.Presentation.Composition
             saveDeal = from != null && DealRule.TryParse(from.deal, out DealRule deal) ? deal : null;
             saveMinutes = from != null && from.minutes > 0 ? from.minutes : 20;
             LoadSaveSheet(from); // RULES-SHEET (R2)
+            ForgetChosenCover(); // doc 63 G1: the game's cover as saved, nothing chosen yet
+            saveCoverPicture = from != null ? from.coverPicture ?? string.Empty : string.Empty;
             ShowGameSave(string.Empty);
         }
 
@@ -136,6 +139,7 @@ namespace ConsoleCards.Presentation.Composition
                     ActionA = SaveStepActionA,
                     ActionB = SaveStepActionB,
                     CycleMinutes = CycleSaveMinutes,
+                    ChoosePicture = ChooseSaveCover, // doc 63 G1
                 };
             }
 
@@ -265,7 +269,17 @@ namespace ConsoleCards.Presentation.Composition
                 isTemplate = template || (over && activePlayerGame != null && activePlayerGame.isTemplate),
                 templateId = over && activePlayerGame != null ? activePlayerGame.templateId ?? string.Empty
                     : activePlayerGame != null && activePlayerGame.isTemplate ? activePlayerGame.id : string.Empty,
+                // Doc 63 G1 (owner, 2026-11-21): the table it is played on, and its cover picture.
+                hasTable = host.CurrentTableSpec != null,
+                tableSpec = host.CurrentTableSpec != null ? host.CurrentTableSpec.Copy() : new TableSpec(),
+                coverPicture = saveCoverPicture,
             };
+            if (!KeepChosenCover(game, out string coverError))
+            {
+                ShowGameSave($"The cover picture could not be kept: {coverError}.");
+                return;
+            }
+
             if (!PlayerGames().Save(game, out string error))
             {
                 ShowGameSave($"The game could not be saved: {error}.");
@@ -274,6 +288,7 @@ namespace ConsoleCards.Presentation.Composition
 
             // The table is now that game: its name on the chip and its rules on the rules card.
             activePlayerGame = game;
+            ForgetChosenCover();
             host.runtimeUi?.CloseGameSave();
             host.SessionService.ShowActiveSessionUi();
             host.ShowMessage($"Saved {game.name}. Find it under New table… to play it again.");
@@ -751,7 +766,15 @@ namespace ConsoleCards.Presentation.Composition
             gameDeckOnTableKey = string.Empty;
             returnToGameSave = false;
             saveKnownDeckKeys = null;
+            startDealtCards.Clear(); // doc 63 G1
+            startDealtPiles.Clear();
         }
+
+        // Doc 63 G1 (owner, 2026-11-21): the cards the game's start deal gave out (to hands or onto the table) and the
+        // piles it made on the table. They came from the game's deck, which is saved by reference and laid out with
+        // all its cards at every start, so saving the table again leaves them out (no second copy, no second deal).
+        internal readonly HashSet<TabletopObjectId> startDealtCards = new HashSet<TabletopObjectId>();
+        internal readonly HashSet<ContainerId> startDealtPiles = new HashSet<ContainerId>();
 
         // ---------- the table save file ----------
 
@@ -760,6 +783,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             SavedTable table = new SavedTable();
             if (host.matchState == null) return table;
+            bool leaveDealt = startDealtCards.Count > 0 && SaveDeckOnTable(); // doc 63 G1: the deck brings them back
             foreach (KeyValuePair<ContainerId, ContainerState> pair in host.matchState.Containers)
             {
                 ContainerState container = pair.Value;
@@ -779,18 +803,21 @@ namespace ConsoleCards.Presentation.Composition
                 SavedPile pile = new SavedPile { kind = kind, arrivalFace = (int)container.ArrivalFace, pose = SavePose(placement.Pose) };
                 for (int i = 0; i < container.ObjectIds.Count; i++)
                 {
+                    if (leaveDealt && startDealtCards.Contains(container.ObjectIds[i])) continue;
                     if (host.matchState.Cards.TryGetValue(container.ObjectIds[i], out CardInstanceState card))
                     {
                         pile.cards.Add(card.BaseState.DefinitionId.Value.ToString("D"));
                     }
                 }
 
+                if (leaveDealt && pile.cards.Count == 0 && startDealtPiles.Contains(container.Id)) continue; // made by the deal
                 table.piles.Add(pile);
             }
 
             foreach (CardInstanceState card in host.matchState.Cards.Values)
             {
                 if (!card.BaseState.ContainerId.IsEmpty || host.matchState.IsTemplateObject(card.BaseState.Id)) continue;
+                if (leaveDealt && startDealtCards.Contains(card.BaseState.Id)) continue; // doc 63 G1
                 table.pieces.Add(new SavedPiece
                 {
                     kind = SavedPiece.Card,
@@ -845,7 +872,8 @@ namespace ConsoleCards.Presentation.Composition
         // Lays a saved table out on the (new, empty) table: boards first, so everything else rests on them.
         // PLACE-2: playerCount (0: every Console) is how many play; fewer players than saved Consoles use the
         // platform seat rule (the first Console, then each next the farthest round the table, PlayerLayoutSeatRules).
-        internal void LayOutPlayerGame(PlayerGameFile game, int playerCount = 0)
+        // Doc 63 G1 (owner, 2026-11-21): deal false (EDIT) lays out the starting table without the start deal.
+        internal void LayOutPlayerGame(PlayerGameFile game, int playerCount = 0, bool deal = true)
         {
             try
             {
@@ -938,7 +966,7 @@ namespace ConsoleCards.Presentation.Composition
 
             host.LoadTableMarks(table.marks); // drawing tool: the game's drawings, part of its start
             host.SessionService.ShowActiveSessionUi(); // the chip shows the game's name and the rules card its rules
-            host.DealAtGameStart(game, gameDeckContainerId, playerCount); // DEAL-1: a game that deals when it starts
+            if (deal) host.DealAtGameStart(game, gameDeckContainerId, playerCount); // DEAL-1: a game that deals when it starts
             string players = playerCount > 0 ? $" for {CountText(playerCount, "player")}" : string.Empty;
             host.ShowMessage(failed == 0
                 ? $"{game.name} is ready{players}. Its rules are on the rules card."
@@ -1098,7 +1126,7 @@ namespace ConsoleCards.Presentation.Composition
             return new GameSelectModel
             {
                 Games = rows,
-                Picture = null,
+                Picture = host.GameSelectPanel.MadeGamePicture(game), // doc 63 G1
                 GameName = entry.Name,
                 Detail = string.IsNullOrWhiteSpace(game.description)
                     ? host.GameSelectPanel.GameDetail(entry)

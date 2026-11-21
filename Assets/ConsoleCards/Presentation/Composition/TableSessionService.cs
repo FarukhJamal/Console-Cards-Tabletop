@@ -430,6 +430,8 @@ namespace ConsoleCards.Presentation.Composition
                     host.Shutdown();
                 }
 
+                // Doc 63 G1 (owner, 2026-11-21): a made game's own table first, so its pieces are laid out on it.
+                host.UseTableForNewTable(selection.Kind == TabletopSessionKind.EmptyCustom ? host.GameSelectPanel.pendingPlayerGame : null);
                 host.activeSession = result.Session;
                 host.emptyTableHandEnabled = true;
                 host.templateContext = candidateContext;

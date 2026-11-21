@@ -1,8 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Definitions;
 using ConsoleCards.Presentation.Art;
+using ConsoleCards.Presentation.Catalog;
 using ConsoleCards.Presentation.Content;
+using ConsoleCards.Presentation.Saving;
 using ConsoleCards.Presentation.UI;
 using UnityEngine;
 using static ConsoleCards.Presentation.Composition.TabletopComposition;
@@ -95,6 +99,183 @@ namespace ConsoleCards.Presentation.Composition
 
             ForgetCover(game);
             ShowGameSelect(message);
+        }
+
+        // ---------- doc 63 G1 (owner, 2026-11-21): the cover of a game you made ----------
+
+        // A made game's cover, by game ID: the picture read from the profile (owned here), else the card whose front
+        // stands in for it. Worked out again only when the game is saved again (its stamp), never every refresh.
+        private sealed class MadeCover
+        {
+            public string Stamp = string.Empty;
+            public Texture2D Picture;
+            public ObjectDefinitionId Card;
+            public GameDefinition CardGame; // the game's own deck: its first card
+        }
+
+        private readonly Dictionary<string, MadeCover> madeCovers = new Dictionary<string, MadeCover>(StringComparer.Ordinal);
+
+        /// <summary>The picture for a game list entry: a made game's cover, else the game's own picture.</summary>
+        internal Texture2D EntryPicture(GameSelectEntry entry)
+        {
+            if (entry == null) return null;
+            return entry.PlayerGame != null ? MadeGamePicture(entry.PlayerGame) : GamePicture(entry.Game);
+        }
+
+        /// <summary>A made game's cover picture, else the front of its deck's first card; null when it has neither.</summary>
+        internal Texture2D MadeGamePicture(PlayerGameFile game)
+        {
+            if (game == null) return null;
+            string id = game.id ?? string.Empty;
+            string stamp = (game.savedUtc ?? string.Empty) + "|" + (game.coverPicture ?? string.Empty);
+            if (!madeCovers.TryGetValue(id, out MadeCover cover) || cover.Stamp != stamp)
+            {
+                if (cover != null && cover.Picture != null) UnityEngine.Object.Destroy(cover.Picture);
+                cover = new MadeCover { Stamp = stamp, Picture = LoadMadeCover(game.coverPicture) };
+                if (cover.Picture == null) FindDeckFront(game.deck, cover);
+                madeCovers[id] = cover;
+            }
+
+            if (cover.Picture != null) return cover.Picture;
+            if (!cover.Card.IsEmpty && host.TryGetCardLook(cover.Card, out CardDefinition card)) return host.FrontArt(card);
+            return cover.CardGame != null ? FirstCardFront(cover.CardGame) : null;
+        }
+
+        /// <summary>The cover picture file of a made game, read from the profile (in someone else's room: the host's too).</summary>
+        internal Texture2D LoadMadeCover(string file)
+        {
+            if (string.IsNullOrWhiteSpace(file)) return null;
+            ProfileService profiles = host.EnsureProfile();
+            Texture2D found = LoadMadeCoverFrom(ContentPackStore.ForLibrary(profiles, true), file);
+            if (found == null && ContentPackStore.InSomeoneElsesRoom) found = LoadMadeCoverFrom(ContentPackStore.ForLibrary(profiles, false), file);
+            return found;
+        }
+
+        private static Texture2D LoadMadeCoverFrom(ContentPackStore store, string file)
+        {
+            string folder = store.UploadsFolder(PlayerLibrary.Id);
+            if (!File.Exists(Path.Combine(folder, file))) return null;
+            byte[] bytes = ContentPackStore.ReadPicture(folder, file, out string error);
+            if (bytes == null)
+            {
+                Debug.LogWarning($"[Your games] A game's cover picture could not be read: {error}");
+                return null;
+            }
+
+            return ArtLibrary.LoadTexture(bytes, "your-game-cover");
+        }
+
+        // The first card of a made game's deck: a deck of yours (or one of its parts), or a game's own deck.
+        private void FindDeckFront(SavedGameDeck deck, MadeCover cover)
+        {
+            if (deck == null || !deck.IsSet) return;
+            try
+            {
+                GameDefinition game = FindGameById(deck.gameId);
+                if (game != null && string.Equals(deck.deckId, SavedGameDeck.GameDeck, StringComparison.OrdinalIgnoreCase))
+                {
+                    cover.CardGame = game;
+                    return;
+                }
+
+                if (game != null && FirstDeckCard(game, deck.deckId, out cover.Card)) return;
+                // Doc 63: a deck moved from its game into "Your cards" is found there.
+                GameDefinition library = host.LibraryGame;
+                if (library != null && !PlayerLibrary.IsLibrary(deck.gameId)) FirstDeckCard(library, deck.deckId, out cover.Card);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[Your games] The cover card could not be found: {exception.Message}");
+            }
+        }
+
+        private bool FirstDeckCard(GameDefinition game, string deckId, out ObjectDefinitionId card)
+        {
+            card = default;
+            bool library = PlayerLibrary.IsLibrary(game);
+            ContentArtServiceScope scope = library ? default : ArtFor(game);
+            try
+            {
+                PlayerDecksFile decks = library
+                    ? ContentPackStore.ForLibrary(host.EnsureProfile(), false).LoadDecks(PlayerLibrary.Id)
+                    : scope.Art.Store.LoadDecks(scope.Art.GameId);
+                for (int d = 0; decks != null && decks.decks != null && d < decks.decks.Count; d++)
+                {
+                    PlayerDeckRecord record = decks.decks[d];
+                    if (record == null) continue;
+                    if (string.Equals(record.id, deckId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (FirstCardIn(record.cards, out card)) return true;
+                        for (int p = 0; record.HasParts && p < record.parts.Count; p++)
+                        {
+                            if (record.parts[p] != null && FirstCardIn(record.parts[p].cards, out card)) return true;
+                        }
+
+                        return false;
+                    }
+
+                    PlayerDeckPart part = record.HasParts ? record.FindPart(deckId) : null;
+                    if (part != null) return FirstCardIn(part.cards, out card);
+                }
+            }
+            finally
+            {
+                scope.Dispose();
+            }
+
+            return false;
+        }
+
+        private static bool FirstCardIn(List<PlayerDeckEntry> entries, out ObjectDefinitionId card)
+        {
+            card = default;
+            for (int i = 0; entries != null && i < entries.Count; i++)
+            {
+                if (entries[i] == null || entries[i].count <= 0 || !Guid.TryParse(entries[i].cardId, out Guid id)) continue;
+                card = new ObjectDefinitionId(id);
+                return true;
+            }
+
+            return false;
+        }
+
+        private GameDefinition FindGameById(string gameId)
+        {
+            if (string.IsNullOrWhiteSpace(gameId)) return null;
+            GameDefinition library = host.LibraryGame;
+            if (library != null && string.Equals(library.StableId, gameId, StringComparison.OrdinalIgnoreCase)) return library;
+            IReadOnlyList<IGameCartridge> cartridges = host.Cartridges.CodeCartridges;
+            for (int i = 0; i < cartridges.Count; i++)
+            {
+                GameDefinition game = cartridges[i].Game;
+                if (game != null && string.Equals(game.StableId, gameId, StringComparison.OrdinalIgnoreCase)) return game;
+            }
+
+            IReadOnlyList<ComponentCatalog> boxes = host.componentLibrary != null ? host.componentLibrary.GameBoxes : null;
+            for (int i = 0; boxes != null && i < boxes.Count; i++)
+            {
+                GameDefinition game = boxes[i] != null ? boxes[i].Game : null;
+                if (game != null && string.Equals(game.StableId, gameId, StringComparison.OrdinalIgnoreCase)) return game;
+            }
+
+            return null;
+        }
+
+        // A game's first card front (its controller-input cards are skipped), as GamePicture finds it.
+        internal Texture2D FirstCardFront(GameDefinition game)
+        {
+            for (int s = 0; game != null && s < game.ContentSets.Count; s++)
+            {
+                GameContentSet set = game.ContentSets[s];
+                for (int c = 0; set != null && c < set.Cards.Count; c++)
+                {
+                    CardDefinition card = set.Cards[c];
+                    if (card == null || card.RepresentedControllerInput != null) continue;
+                    return host.UsesTableArt(game) ? host.FrontArt(card) : card.FrontArtwork;
+                }
+            }
+
+            return null;
         }
     }
 }

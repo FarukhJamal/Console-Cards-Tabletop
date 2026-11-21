@@ -88,7 +88,7 @@ namespace ConsoleCards.Presentation.Composition
                     line,
                     mine ? "YOUR GAME" : players.ToUpperInvariant(),
                     mine,
-                    mine ? null : GamePicture(entry.Game),
+                    EntryPicture(entry), // doc 63 G1: a made game's cover too
                     entry.Id == chosen.Id));
             }
 
@@ -200,7 +200,7 @@ namespace ConsoleCards.Presentation.Composition
                 ? $"{model.PlayersText} · {model.ModeName}"
                 : model.PlayersText;
             model.ContinueSubLine = string.Empty;
-            model.ContinuePicture = chosen.Game != null ? GamePicture(chosen.Game) : null;
+            model.ContinuePicture = EntryPicture(chosen); // doc 63 G1: a made game's cover too
         }
     }
 }

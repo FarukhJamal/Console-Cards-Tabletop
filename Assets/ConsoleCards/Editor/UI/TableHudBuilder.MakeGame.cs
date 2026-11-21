@@ -19,7 +19,7 @@ namespace ConsoleCards.Editor.UI
     public static partial class TableHudBuilder
     {
         public const string MakeGamePath = Folder + "MakeGamePanel.prefab";
-        private const string MakeGameLabel = "MakeGameBoard13e"; // e: SAVE AS TEMPLATE (RULES-SHEET R5) // d: four step helps // c: the RULES step (RULES-SHEET R2, 2026-11-20) // b: the done steps' tick
+        private const string MakeGameLabel = "MakeGameBoard13f"; // f: COVER PICTURE… (doc 63 G1, 2026-11-21) // e: SAVE AS TEMPLATE (RULES-SHEET R5) // d: four step helps // c: the RULES step (RULES-SHEET R2, 2026-11-20) // b: the done steps' tick
 
         private static readonly Color Teal13 = UiKit.Hex("138a8c");
         private static readonly Color Green13 = UiKit.Hex("2fd46b");
@@ -112,6 +112,12 @@ namespace ConsoleCards.Editor.UI
             minutesButton.targetGraphic = minutes.GetComponent<Image>();
             Text minutesLabel = B.TextAt(minutes, "Label", 12, 0, 100, 37, B.medium, 14, B.Words, TextAnchor.MiddleLeft, "20 min");
             B.TextAt(minutes, "Caret", 120, 0, 24, 37, B.bold, 13, B.Muted, TextAnchor.MiddleCenter, "›");
+            // Doc 63 G1 (owner, 2026-11-21): the cover picture, between PLAYERS and ABOUT; WHAT GETS SAVED names it.
+            Field13(details, "CoverLabel", 272, 92, "COVER");
+            Button picture = B.SmallButton(details, "Picture", 272, 113, 76, 35, "PICTURE…", B.Edge, B.Words);
+            RectTransform previewFrame = B.Box(details, "CoverPreview", 352, 113, 26, 35, B.Well, B.Edge, 1f);
+            RawImage coverPreview = B.Rect(previewFrame, "Picture", 1, 1, 24, 33).gameObject.AddComponent<RawImage>();
+            coverPreview.raycastTarget = false;
             Field13(details, "OneLineLabel", 20, 160, "ONE LINE ABOUT IT");
             InputField about = Input13(details, "About", 20, 185, 520, 37, "Shown on the game sheet", false);
             Field13(details, "RulesLabel", 20, 232, "RULES · one line each");
@@ -245,6 +251,8 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("stepNowColor").colorValue = B.Words;
             so.FindProperty("stepIdleColor").colorValue = B.Muted;
             so.FindProperty("warningBox").objectReferenceValue = warning.gameObject;
+            so.FindProperty("pictureButton").objectReferenceValue = picture;
+            so.FindProperty("picturePreview").objectReferenceValue = coverPreview;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

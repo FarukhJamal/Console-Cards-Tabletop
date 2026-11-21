@@ -38,6 +38,9 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Color stepNowColor = new Color(0.024f, 0.937f, 0.941f, 1f);
         [SerializeField] private Color stepIdleColor = new Color(0.608f, 0.643f, 0.655f, 1f);
         [SerializeField] private GameObject warningBox;
+        [Tooltip("Optional (doc 63 G1): PICTURE… on SAVE, and a small preview of the cover.")]
+        [SerializeField] private Button pictureButton;
+        [SerializeField] private RawImage picturePreview;
 
         private static readonly string[] BoardStepNames = { "DECK", "CARDS", "DEAL", "RULES", "SAVE" };
 
@@ -64,6 +67,19 @@ namespace ConsoleCards.Presentation.UI
             }
 
             ShowStepMarks(model);
+            if (pictureButton != null)
+            {
+                pictureButton.onClick.RemoveAllListeners();
+                pictureButton.onClick.AddListener(() => actions?.ChoosePicture?.Invoke(Typed()));
+                pictureButton.interactable = model.CanChoosePicture;
+            }
+
+            if (picturePreview != null)
+            {
+                picturePreview.texture = model.CoverPicture;
+                picturePreview.enabled = model.CoverPicture != null;
+            }
+
             if (boardSteps && backButton != null && model.Step == GameSaveModel.SaveStep) backButton.gameObject.SetActive(false);
             ShowSavedRows(model);
             if (warningBox != null) warningBox.SetActive(!string.IsNullOrEmpty(model.Status));
@@ -97,6 +113,8 @@ namespace ConsoleCards.Presentation.UI
         private void UnbindBoard()
         {
             if (minutesButton != null) minutesButton.onClick.RemoveAllListeners();
+            if (pictureButton != null) pictureButton.onClick.RemoveAllListeners();
+            if (picturePreview != null) picturePreview.texture = null;
             if (newRuleInput != null) newRuleInput.onEndEdit.RemoveAllListeners();
             if (nameInput != null) nameInput.onValueChanged.RemoveListener(NameTyped);
             for (int i = 0; i < ruleRowPool.Count; i++) ruleRowPool[i].Unbind();

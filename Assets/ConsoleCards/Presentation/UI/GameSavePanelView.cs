@@ -42,6 +42,10 @@ namespace ConsoleCards.Presentation.UI
         public int Minutes = 20;
         public bool[] StepsDone = new bool[StepCount];
         public System.Collections.Generic.IReadOnlyList<GameSaveRow> SavedRows = Array.Empty<GameSaveRow>();
+
+        // Doc 63 G1 (owner, 2026-11-21): the game's cover picture (or the stand-in card) and PICTURE… on SAVE.
+        public Texture CoverPicture;
+        public bool CanChoosePicture;
     }
 
     /// <summary>One line of WHAT GETS SAVED: "Decks" · "2 decks".</summary>
@@ -88,6 +92,9 @@ namespace ConsoleCards.Presentation.UI
         public Action<GameSaveTyped> ActionB;
         /// <summary>ABOUT: the next (+1) or previous (-1) play time.</summary>
         public Action<int, GameSaveTyped> CycleMinutes;
+
+        /// <summary>Doc 63 G1: PICTURE… chooses the game's cover picture.</summary>
+        public Action<GameSaveTyped> ChoosePicture;
     }
 
     /// <summary>

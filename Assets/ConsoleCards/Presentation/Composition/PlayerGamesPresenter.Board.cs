@@ -69,7 +69,8 @@ namespace ConsoleCards.Presentation.Composition
             model.Minutes = saveMinutes;
             model.SheetPreview = SheetPreviewLines(); // RULES-SHEET (R2)
             bool hasDeck = deck.Game != null;
-            int deckCards = hasDeck ? SaveDeckCards(deck, out _, out _).Count : 0;
+            List<ObjectDefinitionId> deckCardIds = hasDeck ? SaveDeckCards(deck, out _, out _) : null;
+            int deckCards = deckCardIds != null ? deckCardIds.Count : 0;
             model.StepsDone = new[]
             {
                 hasDeck ? deckOnTable : table.Count > 0, // Deck: the game's deck is on the table (or it needs none)
@@ -105,7 +106,114 @@ namespace ConsoleCards.Presentation.Composition
                     ? CountText(saveMinimumPlayers, "player")
                     : $"{saveMinimumPlayers}–{saveMaximumPlayers} players"),
             };
+            FillCover(model, rows, deckCardIds); // doc 63 G1
             model.SavedRows = rows;
+        }
+
+        // ---------- doc 63 G1 (owner, 2026-11-21): the game's cover picture ----------
+
+        // The picture file the game has (in the "Your cards" uploads), a picture chosen now (kept when the game is
+        // saved), and that picture read once for the preview.
+        internal string saveCoverPicture = string.Empty;
+        private string saveCoverSource = string.Empty;
+        private Texture2D saveCoverPreview;
+        private Texture2D savedCoverPreview; // the game's own file, read once while the panel is open
+
+        private void FillCover(GameSaveModel model, List<GameSaveRow> rows, List<ObjectDefinitionId> deckCardIds)
+        {
+            model.CanChoosePicture = PictureFilePicker.IsAvailable;
+            Texture2D picture = saveCoverPreview;
+            if (picture == null && !string.IsNullOrEmpty(saveCoverPicture))
+            {
+                if (savedCoverPreview == null) savedCoverPreview = host.GameSelectPanel.LoadMadeCover(saveCoverPicture);
+                picture = savedCoverPreview;
+            }
+
+            string line;
+            if (picture != null)
+            {
+                line = $"your picture · {picture.width} × {picture.height}";
+            }
+            else
+            {
+                picture = DeckFront(deckCardIds);
+                line = picture != null ? "the deck's first card" : "none";
+            }
+
+            model.CoverPicture = picture;
+            rows.Add(new GameSaveRow("Cover", line));
+        }
+
+        private Texture2D DeckFront(List<ObjectDefinitionId> deckCardIds)
+        {
+            if (deckCardIds == null || deckCardIds.Count == 0) return null;
+            return host.TryGetCardLook(deckCardIds[0], out CardDefinition card) ? host.FrontArt(card) : null;
+        }
+
+        // PICTURE…: a PNG or JPG for the cover, checked and shown now, copied into the profile when the game is saved.
+        internal void ChooseSaveCover(GameSaveTyped typed)
+        {
+            KeepTyped(typed);
+            if (!PictureFilePicker.IsAvailable)
+            {
+                ShowGameSave("Choosing a picture works in the Unity editor and the Windows game.");
+                return;
+            }
+
+            if (!PictureFilePicker.TryPick("Choose your game's cover picture", out string path))
+            {
+                ShowGameSave(string.Empty);
+                return;
+            }
+
+            Texture2D picture = null;
+            string problem = null;
+            try
+            {
+                string extension = System.IO.Path.GetExtension(path).ToLowerInvariant();
+                System.IO.FileInfo file = new System.IO.FileInfo(path);
+                if (extension != ".png" && extension != ".jpg" && extension != ".jpeg") problem = "only PNG or JPG pictures can be used";
+                else if (!file.Exists) problem = "the picture was not found";
+                else if (file.Length > ContentPackStore.MaximumPictureBytes) problem = "the picture is larger than 16 MB";
+                else picture = ArtLibrary.LoadTexture(System.IO.File.ReadAllBytes(path), "your-game-cover");
+                if (problem == null && picture == null) problem = "the picture could not be read";
+            }
+            catch (Exception exception)
+            {
+                problem = exception.Message;
+            }
+
+            if (problem != null)
+            {
+                ShowGameSave($"That picture can't be the cover: {problem}.");
+                return;
+            }
+
+            ForgetChosenCover();
+            saveCoverPreview = picture;
+            saveCoverSource = path;
+            ShowGameSave($"Cover: OK · {picture.width} × {picture.height}. It is kept when you SAVE.");
+        }
+
+        // On SAVE: a picture chosen now is copied into the profile under the game's ID (games/your-cards/uploads/).
+        internal bool KeepChosenCover(PlayerGameFile game, out string error)
+        {
+            error = string.Empty;
+            if (string.IsNullOrEmpty(saveCoverSource)) return true;
+            ContentPackStore store = ContentPackStore.ForLibrary(host.EnsureProfile(), true);
+            if (!store.TryStoreUpload(PlayerLibrary.Id, "game-cover-" + game.id, saveCoverSource, out string fileName, out error)) return false;
+            game.coverPicture = fileName;
+            saveCoverPicture = fileName;
+            return true;
+        }
+
+        internal void ForgetChosenCover()
+        {
+            if (saveCoverPreview != null) UnityEngine.Object.Destroy(saveCoverPreview);
+            if (savedCoverPreview != null) UnityEngine.Object.Destroy(savedCoverPreview);
+            saveCoverPreview = null;
+            savedCoverPreview = null;
+            saveCoverSource = string.Empty;
         }
     }
 }

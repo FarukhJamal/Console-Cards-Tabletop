@@ -167,7 +167,7 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = 0; i < entries.Count; i++)
             {
                 rows.Add(new CardEditorRowModel(entries[i].Id, entries[i].Name, GameDetail(entries[i]),
-                    GamePicture(entries[i].Game), entries[i].Id == entry.Id));
+                    EntryPicture(entries[i]), entries[i].Id == entry.Id)); // doc 63 G1: made games' covers too
             }
 
             if (entry.PlayerGame != null)
@@ -1106,7 +1106,8 @@ namespace ConsoleCards.Presentation.Composition
             host.PlayerGamesPanel.activePlayerGame = selection.Kind == TabletopSessionKind.EmptyCustom ? game : null;
             if (host.PlayerGamesPanel.activePlayerGame != null)
             {
-                host.PlayerGamesPanel.LayOutPlayerGame(host.PlayerGamesPanel.activePlayerGame, gamePlayers);
+                // Doc 63 G1 (owner, 2026-11-21): EDIT shows the starting table, so it does not deal.
+                host.PlayerGamesPanel.LayOutPlayerGame(host.PlayerGamesPanel.activePlayerGame, gamePlayers, !pendingOpenSave);
                 return;
             }
 

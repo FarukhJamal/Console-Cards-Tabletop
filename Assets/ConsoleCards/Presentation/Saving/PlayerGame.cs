@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using ConsoleCards.Definitions;
+using ConsoleCards.Presentation.TableSurface;
 using UnityEngine;
 
 namespace ConsoleCards.Presentation.Saving
@@ -67,6 +68,20 @@ namespace ConsoleCards.Presentation.Saving
 
         public string templateId = string.Empty;
 
+        /// <summary>
+        /// Doc 63 G1 (owner, 2026-11-21): the game's cover picture, a file in the "Your cards" uploads folder of the
+        /// profile (games/your-cards/uploads/). Empty: none chosen; the first card of the game's deck stands in.
+        /// </summary>
+        public string coverPicture = string.Empty;
+
+        /// <summary>
+        /// Doc 63 G1 (owner, 2026-11-21): the table the game is played on (shape, size, edge, top), set when saved.
+        /// Older saves have none (<see cref="hasTable"/> false) and start on the table the player has.
+        /// </summary>
+        public bool hasTable;
+
+        public TableSpec tableSpec = new TableSpec();
+
         public PlayerGameFile Normalised()
         {
             if (table == null) table = new SavedTable();
@@ -75,6 +90,13 @@ namespace ConsoleCards.Presentation.Saving
             if (sheet == null) sheet = new List<SheetValue>();
             if (sheetText == null) sheetText = new List<SheetText>();
             if (templateId == null) templateId = string.Empty;
+            if (coverPicture == null) coverPicture = string.Empty;
+            if (tableSpec == null)
+            {
+                tableSpec = new TableSpec();
+                hasTable = false;
+            }
+
             table.Normalised();
             minimumPlayers = Mathf.Clamp(minimumPlayers, 1, MaximumPlayers);
             maximumPlayers = Mathf.Clamp(maximumPlayers, minimumPlayers, MaximumPlayers);

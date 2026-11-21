@@ -65,6 +65,9 @@ namespace ConsoleCards.Presentation.Composition
         private DealRule pendingStartDeal;
         private int pendingStartMinimum = 1;
         private int pendingStartMaximum = 1;
+        // Doc 63 G1 (owner, 2026-11-21): true while the game-start deal runs; its cards and piles are noted so saving
+        // the table again leaves them out (the game's deck brings them back at the next start).
+        private bool dealingAtGameStart;
 
         private struct DealSeat
         {
@@ -229,7 +232,7 @@ namespace ConsoleCards.Presentation.Composition
                         pendingStartDeal = null;
                         ContextMenus.CloseContextMenu();
                         dealDraftPlayers = count;
-                        DealFromPile(pileId, rule, count);
+                        DealAtStartFromPile(pileId, rule, count);
                     }));
             }
 
@@ -264,14 +267,14 @@ namespace ConsoleCards.Presentation.Composition
             if (playerCount > 0)
             {
                 dealDraftPlayers = Mathf.Clamp(playerCount, 1, DealMaximumPlayers);
-                DealFromPile(deckId, rule, dealDraftPlayers);
+                DealAtStartFromPile(deckId, rule, dealDraftPlayers);
                 return;
             }
 
             int seats = DealSeatsWithHands().Count;
             if (seats > 0 || game.minimumPlayers >= game.maximumPlayers)
             {
-                DealFromPile(deckId, rule, Mathf.Max(1, game.minimumPlayers));
+                DealAtStartFromPile(deckId, rule, Mathf.Max(1, game.minimumPlayers));
                 return;
             }
 
@@ -286,6 +289,20 @@ namespace ConsoleCards.Presentation.Composition
             contextMenuTokenId = TabletopObjectId.Empty;
             contextMenuConsoleId = ConsoleId.Empty;
             ContextMenus.SetContextMenuMode(ContextMenuMode.DealPlayers);
+        }
+
+        // Doc 63 G1: the start deal, with its cards and piles noted (see dealingAtGameStart).
+        private void DealAtStartFromPile(ContainerId pileId, DealRule rule, int players)
+        {
+            dealingAtGameStart = true;
+            try
+            {
+                DealFromPile(pileId, rule, players);
+            }
+            finally
+            {
+                dealingAtGameStart = false;
+            }
         }
 
         // T over a deck or stack: deal by the rule, or open the form there.
@@ -402,6 +419,7 @@ namespace ConsoleCards.Presentation.Composition
 
                             given[s]++;
                             anyGiven = true;
+                            if (dealingAtGameStart) PlayerGamesPanel.startDealtCards.Add(cardId); // doc 63 G1
                             if (card != null)
                             {
                                 dealtOrder.Add(card.transform);
@@ -418,6 +436,11 @@ namespace ConsoleCards.Presentation.Composition
             finally
             {
                 SessionService.EndUndoBatch();
+            }
+
+            for (int s = 0; dealingAtGameStart && s < tableStacks.Length; s++)
+            {
+                if (!tableStacks[s].IsEmpty) PlayerGamesPanel.startDealtPiles.Add(tableStacks[s]); // doc 63 G1
             }
 
             AnimateDealtCards(starts, dealtOrder, dealtTo, seats, toHands);
