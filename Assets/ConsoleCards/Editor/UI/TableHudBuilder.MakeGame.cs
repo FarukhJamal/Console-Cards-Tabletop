@@ -19,7 +19,7 @@ namespace ConsoleCards.Editor.UI
     public static partial class TableHudBuilder
     {
         public const string MakeGamePath = Folder + "MakeGamePanel.prefab";
-        private const string MakeGameLabel = "MakeGameBoard13f"; // f: COVER PICTURE… (doc 63 G1, 2026-11-21) // e: SAVE AS TEMPLATE (RULES-SHEET R5) // d: four step helps // c: the RULES step (RULES-SHEET R2, 2026-11-20) // b: the done steps' tick
+        private const string MakeGameLabel = "MakeGameBoard13g"; // g: LAYOUT FOR a player count (doc 63 G2, 2026-11-21) // f: COVER PICTURE… (doc 63 G1, 2026-11-21) // e: SAVE AS TEMPLATE (RULES-SHEET R5) // d: four step helps // c: the RULES step (RULES-SHEET R2, 2026-11-20) // b: the done steps' tick
 
         private static readonly Color Teal13 = UiKit.Hex("138a8c");
         private static readonly Color Green13 = UiKit.Hex("2fd46b");
@@ -122,7 +122,7 @@ namespace ConsoleCards.Editor.UI
             InputField about = Input13(details, "About", 20, 185, 520, 37, "Shown on the game sheet", false);
             Field13(details, "RulesLabel", 20, 232, "RULES · one line each");
             B.TextAt(details, "DragNote", 380, 232, 160, 16, B.medium, 11, B.Faint, TextAnchor.MiddleRight, "drag ⁝⁝ to reorder");
-            RectTransform ruleRows = B.Rect(details, "Rules", 20, 256, 520, 252);
+            RectTransform ruleRows = B.Rect(details, "Rules", 20, 256, 520, 220); // doc 63 G2: LAYOUT FOR goes under it
             SaveRuleRow template = RuleRow13(ruleRows);
             InputField newRule = Input13(ruleRows, "NewRule", 0, 0, 520, 36, "Type a rule and press Enter…", false);
             foreach (Outline outline in newRule.GetComponents<Outline>()) outline.effectColor = B.Cyan;
@@ -134,6 +134,13 @@ namespace ConsoleCards.Editor.UI
             // The saved text (the rows write into it); hidden.
             InputField rules = Input13(details, "RulesText", 20, 256, 520, 36, string.Empty, true);
             rules.gameObject.SetActive(false);
+            // Doc 63 G2 (owner, 2026-11-21): which layout SAVE writes (all player counts, or one count), and CLEAR.
+            Field13(details, "LayoutForLabel", 20, 487, "LAYOUT FOR");
+            Button previousLayout = B.SmallButton(details, "PreviousLayout", 130, 480, 30, 30, "‹", B.Edge, B.Cyan);
+            RectTransform layoutBox = B.Box(details, "Layout", 164, 480, 240, 30, B.Well, B.Edge, 1f);
+            Text layoutLabel = B.TextAt(layoutBox, "Label", 0, 0, 240, 30, B.bold, 13, B.Words, TextAnchor.MiddleCenter, "All player counts");
+            Button nextLayout = B.SmallButton(details, "NextLayout", 408, 480, 30, 30, "›", B.Edge, B.Cyan);
+            Button clearLayout = B.SmallButton(details, "ClearLayout", 446, 480, 94, 30, "CLEAR", B.Edge, B.Words);
             Button saveOver = Pill13(details, "SaveOver", 20, 520, 256, 48, "SAVE OVER", B.Well, B.Words, out Text saveOverLabel);
             Button saveAsNew = Pill13(details, "SaveAsNew", 284, 520, 256, 48, "SAVE AS NEW", Teal13, B.Words, out _);
             Button saveTemplate = B.SmallButton(details, "SaveTemplate", 20, 574, 200, 28, "SAVE AS TEMPLATE", B.Edge, B.Words);
@@ -253,6 +260,10 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("warningBox").objectReferenceValue = warning.gameObject;
             so.FindProperty("pictureButton").objectReferenceValue = picture;
             so.FindProperty("picturePreview").objectReferenceValue = coverPreview;
+            so.FindProperty("previousLayoutButton").objectReferenceValue = previousLayout;
+            so.FindProperty("layoutLabel").objectReferenceValue = layoutLabel;
+            so.FindProperty("nextLayoutButton").objectReferenceValue = nextLayout;
+            so.FindProperty("clearLayoutButton").objectReferenceValue = clearLayout;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

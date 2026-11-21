@@ -431,7 +431,7 @@ namespace ConsoleCards.Presentation.Composition
                 }
 
                 // Doc 63 G1 (owner, 2026-11-21): a made game's own table first, so its pieces are laid out on it.
-                host.UseTableForNewTable(selection.Kind == TabletopSessionKind.EmptyCustom ? host.GameSelectPanel.pendingPlayerGame : null);
+                host.UseTableForNewTable(selection.Kind == TabletopSessionKind.EmptyCustom ? host.GameSelectPanel.PendingPlayerGameLayout() : null); // doc 63 G2: the count's table
                 host.activeSession = result.Session;
                 host.emptyTableHandEnabled = true;
                 host.templateContext = candidateContext;

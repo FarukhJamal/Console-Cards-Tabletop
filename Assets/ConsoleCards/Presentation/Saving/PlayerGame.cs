@@ -82,6 +82,44 @@ namespace ConsoleCards.Presentation.Saving
 
         public TableSpec tableSpec = new TableSpec();
 
+        /// <summary>
+        /// Doc 63 G2 (owner, 2026-11-21): a table and layout for some player counts (8 players on a hexagon table).
+        /// A count without one starts on the default above (<see cref="table"/>, <see cref="tableSpec"/>).
+        /// </summary>
+        public List<SavedCountLayout> layouts = new List<SavedCountLayout>();
+
+        /// <summary>Doc 63 G2: the layout saved for <paramref name="players"/>, else null (the default is used).</summary>
+        public SavedCountLayout LayoutFor(int players)
+        {
+            if (players <= 0 || layouts == null) return null;
+            for (int i = 0; i < layouts.Count; i++)
+            {
+                if (layouts[i] != null && layouts[i].players == players && layouts[i].table != null) return layouts[i];
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Doc 63 G2: the game as laid out for <paramref name="players"/>: this file when the count has no layout of
+        /// its own, else a copy with that count's table, table spec and deck position (the file is not changed).
+        /// </summary>
+        public PlayerGameFile ForPlayers(int players)
+        {
+            SavedCountLayout layout = LayoutFor(players);
+            if (layout == null) return this;
+            PlayerGameFile copy = (PlayerGameFile)MemberwiseClone();
+            copy.table = layout.table;
+            copy.hasTable = layout.hasTable && layout.tableSpec != null;
+            copy.tableSpec = layout.tableSpec ?? new TableSpec();
+            if (deck != null && layout.hasDeckPose && layout.deckPose != null)
+            {
+                copy.deck = new SavedGameDeck { gameId = deck.gameId, deckId = deck.deckId, name = deck.name, pose = layout.deckPose };
+            }
+
+            return copy;
+        }
+
         public PlayerGameFile Normalised()
         {
             if (table == null) table = new SavedTable();
@@ -97,6 +135,30 @@ namespace ConsoleCards.Presentation.Saving
                 hasTable = false;
             }
 
+            if (layouts == null) layouts = new List<SavedCountLayout>();
+            for (int i = layouts.Count - 1; i >= 0; i--)
+            {
+                SavedCountLayout layout = layouts[i];
+                if (layout == null || layout.table == null || layout.players < 1 || layout.players > MaximumPlayers)
+                {
+                    layouts.RemoveAt(i);
+                    continue;
+                }
+
+                layout.table.Normalised();
+                if (layout.tableSpec == null)
+                {
+                    layout.tableSpec = new TableSpec();
+                    layout.hasTable = false;
+                }
+
+                if (layout.deckPose == null)
+                {
+                    layout.deckPose = new SavedPose();
+                    layout.hasDeckPose = false;
+                }
+            }
+
             table.Normalised();
             minimumPlayers = Mathf.Clamp(minimumPlayers, 1, MaximumPlayers);
             maximumPlayers = Mathf.Clamp(maximumPlayers, minimumPlayers, MaximumPlayers);
@@ -106,6 +168,21 @@ namespace ConsoleCards.Presentation.Saving
         public static string NewId() => "game-" + Guid.NewGuid().ToString("N").Substring(0, 12);
 
         public static string Now() => DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Doc 63 G2 (owner, 2026-11-21): a made game's table and layout for one player count: the table it is played on,
+    /// what lies on it, and where the game's deck lies (the deck itself is the game's, the same for every count).
+    /// </summary>
+    [Serializable]
+    public sealed class SavedCountLayout
+    {
+        public int players;
+        public bool hasTable;
+        public TableSpec tableSpec = new TableSpec();
+        public SavedTable table = new SavedTable();
+        public bool hasDeckPose;
+        public SavedPose deckPose = new SavedPose();
     }
 
     /// <summary>

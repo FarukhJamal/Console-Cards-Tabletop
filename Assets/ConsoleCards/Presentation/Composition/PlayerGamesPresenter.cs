@@ -119,6 +119,8 @@ namespace ConsoleCards.Presentation.Composition
             LoadSaveSheet(from); // RULES-SHEET (R2)
             ForgetChosenCover(); // doc 63 G1: the game's cover as saved, nothing chosen yet
             saveCoverPicture = from != null ? from.coverPicture ?? string.Empty : string.Empty;
+            // Doc 63 G2: a table laid out from a count's own layout saves back to that layout.
+            saveLayoutPlayers = from != null && activeLayoutPlayers > 0 && from.LayoutFor(activeLayoutPlayers) != null ? activeLayoutPlayers : 0;
             ShowGameSave(string.Empty);
         }
 
@@ -140,6 +142,8 @@ namespace ConsoleCards.Presentation.Composition
                     ActionB = SaveStepActionB,
                     CycleMinutes = CycleSaveMinutes,
                     ChoosePicture = ChooseSaveCover, // doc 63 G1
+                    CycleLayout = CycleSaveLayout, // doc 63 G2
+                    ClearLayout = ClearSaveLayout,
                 };
             }
 
@@ -164,7 +168,8 @@ namespace ConsoleCards.Presentation.Composition
                     ? status
                     : table.Count == 0 && !deckOnTable
                         ? "The table is empty: put out components with the Toolbox first."
-                        : "Starting this game lays the table out exactly like this. Hands and cards in Console slots are not saved.",
+                        : TableHint() // doc 63 G2
+                            ?? "Starting this game lays the table out exactly like this. Hands and cards in Console slots are not saved.",
             };
             FillSaveStep(model, deck, deckOnTable);
             FillBoardParts(model, table, deck, deckOnTable); // board 13
@@ -274,6 +279,12 @@ namespace ConsoleCards.Presentation.Composition
                 tableSpec = host.CurrentTableSpec != null ? host.CurrentTableSpec.Copy() : new TableSpec(),
                 coverPicture = saveCoverPicture,
             };
+            if (!ApplySaveLayout(game, template, out string layoutProblem)) // doc 63 G2: a count's layout, or the default
+            {
+                ShowGameSave(layoutProblem);
+                return;
+            }
+
             if (!KeepChosenCover(game, out string coverError))
             {
                 ShowGameSave($"The cover picture could not be kept: {coverError}.");
@@ -287,6 +298,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             // The table is now that game: its name on the chip and its rules on the rules card.
+            activeLayoutPlayers = EffectiveLayoutPlayers(); // doc 63 G2
             activePlayerGame = game;
             ForgetChosenCover();
             host.runtimeUi?.CloseGameSave();

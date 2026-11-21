@@ -46,6 +46,10 @@ namespace ConsoleCards.Presentation.UI
         // Doc 63 G1 (owner, 2026-11-21): the game's cover picture (or the stand-in card) and PICTURE… on SAVE.
         public Texture CoverPicture;
         public bool CanChoosePicture;
+
+        // Doc 63 G2 (owner, 2026-11-21): LAYOUT FOR on SAVE (all player counts, or one count) and CLEAR.
+        public string LayoutText = string.Empty;
+        public bool CanClearLayout;
     }
 
     /// <summary>One line of WHAT GETS SAVED: "Decks" · "2 decks".</summary>
@@ -95,6 +99,10 @@ namespace ConsoleCards.Presentation.UI
 
         /// <summary>Doc 63 G1: PICTURE… chooses the game's cover picture.</summary>
         public Action<GameSaveTyped> ChoosePicture;
+
+        /// <summary>Doc 63 G2: LAYOUT FOR ‹ › (the next (+1) or previous (-1) count) and CLEAR (that count's layout).</summary>
+        public Action<int, GameSaveTyped> CycleLayout;
+        public Action<GameSaveTyped> ClearLayout;
     }
 
     /// <summary>

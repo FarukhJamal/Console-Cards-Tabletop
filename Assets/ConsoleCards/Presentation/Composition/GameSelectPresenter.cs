@@ -1104,10 +1104,16 @@ namespace ConsoleCards.Presentation.Composition
             host.PlayerGamesPanel.ResetGameDeck();
             // Doc 29: the table is a game you made only when it was started from one.
             host.PlayerGamesPanel.activePlayerGame = selection.Kind == TabletopSessionKind.EmptyCustom ? game : null;
+            host.PlayerGamesPanel.activeLayoutPlayers = 0;
             if (host.PlayerGamesPanel.activePlayerGame != null)
             {
                 // Doc 63 G1 (owner, 2026-11-21): EDIT shows the starting table, so it does not deal.
-                host.PlayerGamesPanel.LayOutPlayerGame(host.PlayerGamesPanel.activePlayerGame, gamePlayers, !pendingOpenSave);
+                // Doc 63 G2 (owner, 2026-11-21): PLAY uses the player count's own layout when it has one; EDIT shows the
+                // default layout with all its Consoles.
+                int layoutPlayers = pendingOpenSave ? 0 : gamePlayers;
+                PlayerGameFile laid = game.ForPlayers(layoutPlayers);
+                if (!ReferenceEquals(laid, game)) host.PlayerGamesPanel.activeLayoutPlayers = layoutPlayers;
+                host.PlayerGamesPanel.LayOutPlayerGame(laid, layoutPlayers, !pendingOpenSave);
                 return;
             }
 
@@ -1211,5 +1217,10 @@ namespace ConsoleCards.Presentation.Composition
         internal PlayerGameFile pendingPlayerGame;
         // PLACE-2: how many play the game you made that is starting (0: not chosen).
         internal int pendingPlayerGameCount;
+
+        // Doc 63 G2 (owner, 2026-11-21): the game waiting to start, as laid out for its player count (its table
+        // first); EDIT uses the default layout.
+        internal PlayerGameFile PendingPlayerGameLayout() =>
+            pendingPlayerGame?.ForPlayers(pendingOpenSave ? 0 : pendingPlayerGameCount);
     }
 }

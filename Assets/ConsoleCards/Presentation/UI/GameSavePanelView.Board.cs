@@ -41,6 +41,11 @@ namespace ConsoleCards.Presentation.UI
         [Tooltip("Optional (doc 63 G1): PICTURE… on SAVE, and a small preview of the cover.")]
         [SerializeField] private Button pictureButton;
         [SerializeField] private RawImage picturePreview;
+        [Tooltip("Optional (doc 63 G2): LAYOUT FOR ‹ all player counts › and CLEAR on SAVE.")]
+        [SerializeField] private Button previousLayoutButton;
+        [SerializeField] private Text layoutLabel;
+        [SerializeField] private Button nextLayoutButton;
+        [SerializeField] private Button clearLayoutButton;
 
         private static readonly string[] BoardStepNames = { "DECK", "CARDS", "DEAL", "RULES", "SAVE" };
 
@@ -80,6 +85,8 @@ namespace ConsoleCards.Presentation.UI
                 picturePreview.enabled = model.CoverPicture != null;
             }
 
+            BindLayout(model); // doc 63 G2
+
             if (boardSteps && backButton != null && model.Step == GameSaveModel.SaveStep) backButton.gameObject.SetActive(false);
             ShowSavedRows(model);
             if (warningBox != null) warningBox.SetActive(!string.IsNullOrEmpty(model.Status));
@@ -115,9 +122,28 @@ namespace ConsoleCards.Presentation.UI
             if (minutesButton != null) minutesButton.onClick.RemoveAllListeners();
             if (pictureButton != null) pictureButton.onClick.RemoveAllListeners();
             if (picturePreview != null) picturePreview.texture = null;
+            Clear(previousLayoutButton);
+            Clear(nextLayoutButton);
+            Clear(clearLayoutButton);
             if (newRuleInput != null) newRuleInput.onEndEdit.RemoveAllListeners();
             if (nameInput != null) nameInput.onValueChanged.RemoveListener(NameTyped);
             for (int i = 0; i < ruleRowPool.Count; i++) ruleRowPool[i].Unbind();
+        }
+
+        // Doc 63 G2 (owner, 2026-11-21): which layout SAVE writes, and CLEAR for a count's own layout.
+        private void BindLayout(GameSaveModel model)
+        {
+            if (layoutLabel != null) layoutLabel.text = model.LayoutText ?? string.Empty;
+            Clear(previousLayoutButton);
+            Clear(nextLayoutButton);
+            Clear(clearLayoutButton);
+            if (previousLayoutButton != null) previousLayoutButton.onClick.AddListener(() => actions?.CycleLayout?.Invoke(-1, Typed()));
+            if (nextLayoutButton != null) nextLayoutButton.onClick.AddListener(() => actions?.CycleLayout?.Invoke(1, Typed()));
+            if (clearLayoutButton != null)
+            {
+                clearLayoutButton.onClick.AddListener(() => actions?.ClearLayout?.Invoke(Typed()));
+                clearLayoutButton.interactable = model.CanClearLayout;
+            }
         }
 
         private void NameTyped(string text)

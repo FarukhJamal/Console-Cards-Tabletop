@@ -106,6 +106,7 @@ namespace ConsoleCards.Presentation.Composition
                     ? CountText(saveMinimumPlayers, "player")
                     : $"{saveMinimumPlayers}–{saveMaximumPlayers} players"),
             };
+            FillLayoutRow(model, rows); // doc 63 G2
             FillCover(model, rows, deckCardIds); // doc 63 G1
             model.SavedRows = rows;
         }
