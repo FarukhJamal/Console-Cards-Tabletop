@@ -35,6 +35,9 @@ namespace ConsoleCards.Presentation.Interaction
 
         public float HandRowCardSize { get; set; } = 1f;
 
+        /// <summary>HAND-6 (owner, 2026-11-26): true when the screen point is over or just beside the player's own hand area; a card from the tray let go there stays in the hand.</summary>
+        public Func<Vector2, bool> IsNearOwnHandArea { get; set; }
+
         private CardView activeCardView;
         private ContainerId sourceContainerId;
         private IContainerLayoutView sourceLayoutView;
@@ -457,6 +460,14 @@ namespace ConsoleCards.Presentation.Interaction
                         || target.ContainerId != sourceContainerId))
                 {
                     // Released without leaving the tray: it is a reorder or a return.
+                    target = CardDropTarget.ForContainer(sourceContainerId);
+                    resolved = true;
+                }
+                if (trayDragActive && IsNearOwnHandArea != null
+                    && (!resolved || target.Kind != CardDropTargetKind.Container)
+                    && IsNearOwnHandArea(screenPosition))
+                {
+                    // HAND-6 (owner, 2026-11-26: "I dropped the hand card near the hand ... you never see it again"): near the hand it goes back to it.
                     target = CardDropTarget.ForContainer(sourceContainerId);
                     resolved = true;
                 }

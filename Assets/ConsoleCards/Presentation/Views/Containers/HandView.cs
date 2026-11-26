@@ -336,8 +336,11 @@ namespace ConsoleCards.Presentation.Views.Containers
         {
             return trayHandoffActive
                 && ReferenceEquals(trayDraggedCard, card)
-                && trayHandoffElapsed >= trayHandoffDuration;
+                && trayHandoffElapsed >= TrayHandoffSeconds;
         }
+
+        // HAND-6 (owner, 2026-11-26: "dragging from hand to table is very fast"): the glide lasts 0.15 to 0.25 s whatever the scene value says.
+        private float TrayHandoffSeconds => Mathf.Clamp(trayHandoffDuration, 0.15f, 0.25f);
 
         internal void EndTrayDrag()
         {
@@ -998,10 +1001,10 @@ namespace ConsoleCards.Presentation.Views.Containers
         {
             trayArrivals.Remove(card.ObjectId); // HAND-4: the handoff sets its own size
             trayHandoffElapsed += deltaTime;
-            float t = trayHandoffDuration > 0f ? Mathf.Clamp01(trayHandoffElapsed / trayHandoffDuration) : 1f;
-            // Ease-out: quick departure, gentle landing, so the switch to a held card happens at rest.
-            float remaining = 1f - t;
-            float eased = 1f - (remaining * remaining * remaining);
+            float t = Mathf.Clamp01(trayHandoffElapsed / TrayHandoffSeconds);
+            // HAND-6: ease in and out (was an ease-out cubic: most of the way in the first moments, which read as a jump): the card
+            // sets off gently, glides, and lands at rest so the switch to a held card is not seen.
+            float eased = t * t * (3f - (2f * t));
             Transform anchor = trayRig.Anchor;
             float targetScale = 1f / Mathf.Max(0.0001f, trayRig.Scale);
             float startScale = Mathf.Max(0.0001f, trayHandoffStart.Scale);

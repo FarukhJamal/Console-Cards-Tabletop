@@ -36,6 +36,7 @@ namespace ConsoleCards.Presentation.Composition
         private const float HandCarryLift = 0.45f;         // world units the carried cards ride above the table (2026-11-14: over the rim)
         private const float HandRowSpacing = 1.08f;        // of a card's width between cards laid on the table
         private const float HandEdgeSize = 1.25f;          // the row's cards a little larger than on the table, to read
+        private const float HandDropMarginCards = 0.4f;    // HAND-6 (owner, 2026-11-26): letting go this near the hand area (card widths) still counts as over it
 
         private readonly List<CardView> handEdgeCards = new List<CardView>(16);
         private readonly List<Transform> handEdgeProxies = new List<Transform>(16);
@@ -71,6 +72,7 @@ namespace ConsoleCards.Presentation.Composition
         private bool handCarryDropPending;
         private ContainerId handCarryDropTarget;
         private bool handCarryBackToHand; // HAND-5 (owner, 2026-11-26): let go over your hand area: the cards stay in the hand
+        private bool handCarryAutoSelected; // HAND-6 (owner, 2026-11-26): this drag selected its card itself (it was not selected before)
 
         // POL-7: selected hand cards that come along when a selected piece on the table is dragged.
         private readonly List<CardView> groupHandCards = new List<CardView>(16);
@@ -390,6 +392,11 @@ namespace ConsoleCards.Presentation.Composition
                 toolSelection.Add(new ToolPick { View = handEdgePressCard });
                 DrawToolSelection();
                 RefreshToolBarState();
+                handCarryAutoSelected = true; // HAND-6
+            }
+            else
+            {
+                handCarryAutoSelected = false; // HAND-6
             }
 
             handCarryGrab = coordinateConverter.ToWorldPosition(grab);
@@ -452,7 +459,8 @@ namespace ConsoleCards.Presentation.Composition
             if (!handCarryActive) return;
             // HAND-5 (owner, 2026-11-26): the hand area lies past the table's edge, where the pointer meets no table, so the point
             // on the table plane is not where it was let go. The area's own box under the pointer decides: the cards go back to the hand.
-            handCarryBackToHand = IsScreenPointOverOwnHandArea(screenPosition);
+            // HAND-6 (owner, 2026-11-26: "I dropped the hand card near the hand and it spawns in front of the camera"): near the box counts too.
+            handCarryBackToHand = IsScreenPointOverOwnHandArea(screenPosition, HandDropMarginCards * WorldPerCardWidth());
             handCarryDropTarget = handCarryBackToHand ? ContainerId.Empty : FindHandDropPile(handCarryPoint);
             handCarryDropPending = true;
             handCarryActive = false;
@@ -510,6 +518,18 @@ namespace ConsoleCards.Presentation.Composition
                 SessionService.EndUndoBatch();
             }
 
+            if (handCarryBackToHand && handCarryAutoSelected)
+            {
+                // HAND-6 (owner, 2026-11-26: "when you put back the card it seems raised"): the drag selected it only to carry it; a selected
+                // row card rises out of the row (HandEdgeSelectedLift), so it goes back to the row unselected.
+                for (int i = 0; i < handCarryCards.Count; i++)
+                {
+                    int picked = IndexOfPick(new ToolPick { View = handCarryCards[i] });
+                    if (picked >= 0) toolSelection.RemoveAt(picked);
+                }
+            }
+
+            handCarryAutoSelected = false; // HAND-6
             handCarryBackToHand = false; // HAND-5
             ClearHandCarryLists();
             handEdgePressCard = null;
@@ -537,7 +557,9 @@ namespace ConsoleCards.Presentation.Composition
                 }
                 else
                 {
-                    TableCoordinate at = coordinateConverter.ToTableCoordinate(HandRowPosition(anchor, seatRotation, i, cards.Count));
+                    // HAND-6 (owner, 2026-11-26): the point under the pointer may lie past the table's edge (even beside the camera, where the
+                    // pointer's ray meets the table plane): the cards land inside the table, never out where they would fall.
+                    TableCoordinate at = coordinateConverter.ToTableCoordinate(ClampToTable(HandRowPosition(anchor, seatRotation, i, cards.Count)));
                     TabletopPose pose = card.BoundState.Pose;
                     target = CardDropTarget.ForTabletop(new TabletopPose(at, pose.RotationDegrees, pose.Layer, pose.LocalOrder));
                 }
@@ -552,7 +574,7 @@ namespace ConsoleCards.Presentation.Composition
 
         // HAND-5 (owner, 2026-11-26): true when the pointer's ray passes through this screen's own hand area (the box drawn blue),
         // wherever it lies, on the table or past its edge. The same test as the box's highlight; no physics, no allocation.
-        private bool IsScreenPointOverOwnHandArea(Vector2 screenPosition)
+        private bool IsScreenPointOverOwnHandArea(Vector2 screenPosition, float margin = 0f) // HAND-6: margin in world units
         {
             UnityCamera viewer = hitResolver != null ? hitResolver.TargetCamera : null;
             if (viewer == null || handView == null || !handView.IsBound) return false;
@@ -560,7 +582,7 @@ namespace ConsoleCards.Presentation.Composition
             ContainerId hand = handView.ContainerId;
             for (int i = 0; i < handAreas.Count; i++)
             {
-                if (handAreas[i] != null && handAreas[i].ContainerId == hand && handAreas[i].Contains(ray)) return true;
+                if (handAreas[i] != null && handAreas[i].ContainerId == hand && handAreas[i].Contains(ray, margin)) return true;
             }
 
             return false;
@@ -573,6 +595,16 @@ namespace ConsoleCards.Presentation.Composition
             Vector3 right = seatRotation * Vector3.right;
             float along = (index - ((count - 1) * 0.5f)) * width * HandRowSpacing;
             return anchor + (right * along);
+        }
+
+        // HAND-6: a world point moved inside the table's area, a card's length from its edge (the point itself when the table is not measured). No allocation.
+        private Vector3 ClampToTable(Vector3 world)
+        {
+            if (!TryGetTableWorldBounds(out Bounds table)) return world;
+            float inset = Mathf.Max(handEdgeHalfLength * Mathf.Abs(handEdgeScale.z), handEdgeHalfWidth * Mathf.Abs(handEdgeScale.x));
+            world.x = Mathf.Clamp(world.x, table.min.x + inset, table.max.x - inset);
+            world.z = Mathf.Clamp(world.z, table.min.z + inset, table.max.z - inset);
+            return world;
         }
 
         // A deck, stack or discard pile under the drop point (not one of the selected piles).

@@ -140,13 +140,13 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         /// <summary>True when the ray passes through this zone's box (no physics, no allocation).</summary>
-        internal bool Contains(Ray ray)
+        internal bool Contains(Ray ray, float margin = 0f) // HAND-6 (owner, 2026-11-26): margin (world) widens the box all round
         {
             if (!gameObject.activeInHierarchy) return false;
             Vector3 origin = transform.InverseTransformPoint(ray.origin);
             Vector3 direction = transform.InverseTransformDirection(ray.direction);
-            Vector3 min = zone.center - (zone.size * 0.5f);
-            Vector3 max = zone.center + (zone.size * 0.5f);
+            Vector3 min = zone.center - (zone.size * 0.5f) - (Vector3.one * margin);
+            Vector3 max = zone.center + (zone.size * 0.5f) + (Vector3.one * margin);
             float near = 0f;
             float far = float.MaxValue;
             for (int axis = 0; axis < 3; axis++)
