@@ -136,6 +136,8 @@ namespace ConsoleCards.Presentation.Composition
                 // CONTENT-SAVE (s142 audit): table saves live in the profile's saves/ folder, not under games/, so none is
                 // sent today; a save copied into games/ by hand would be. A saved table holds every hidden card and the seed.
                 if (found[i].EndsWith(".ccsave", StringComparison.OrdinalIgnoreCase) || StartsWithSaveMagic(found[i])) continue;
+                // CONTENT-1: card-editor source originals ("...-source.png") only let the card editor re-crop; a guest never needs them.
+                if (Path.GetFileName(found[i]).IndexOf("-source.", StringComparison.OrdinalIgnoreCase) >= 0) continue;
                 long size;
                 try
                 {
@@ -183,16 +185,105 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        // Sends the content to a joined computer that does not have it yet (a large message, sent once per change).
+        // CONTENT-1: the bundle goes to a joined computer in 64 KB parts, a few per frame and at most 4 not yet acknowledged,
+        // so the roster, the table and the commands are not stuck behind one huge message (found live: 49 MB, 8+ minutes).
+        private const byte MsgContentPart = 28; // host → guest, unordered: [id][int index][int count][int total length][bytes]
+        private const byte MsgContentAck = 29; // guest → host, unordered: [id][int index]
+        private const int ContentPartBytes = 64 * 1024;
+        private const int ContentPartHeader = 13;
+        private const int ContentPartsInFlight = 4;
+        private const int ContentPartsPerFrame = 3;
+        private const long ContentBundleMargin = 1024L * 1024L; // the bundle's own headers (names, sizes) on top of MaxContentBytes
+
+        private byte[] contentPartBuffer; // host: one buffer for every part sent (the session copies it)
+        private byte[] contentIncoming; // joined computer: the bundle being assembled, with the leading message byte ReadContent expects
+        private int contentIncomingParts;
+        private int contentIncomingCount;
+        private int contentIncomingStep;
+
+        private static int ContentPartCount(int length) => (length + ContentPartBytes - 1) / ContentPartBytes;
+
+        private static void PutInt(byte[] buffer, int at, int value)
+        {
+            buffer[at] = (byte)value;
+            buffer[at + 1] = (byte)(value >> 8);
+            buffer[at + 2] = (byte)(value >> 16);
+            buffer[at + 3] = (byte)(value >> 24);
+        }
+
+        // Starts (or restarts, when the host's content changed) the transfer of the content to a joined computer that does
+        // not have it yet. TickContent sends the parts.
         private void SendContent(Member member)
         {
             if (hostContentBundle == null || member == null || member.IsHost || !member.Connected || member.Connection < 0) return;
             if (member.ContentHash == hostContentHash) return;
-            byte[] message = new byte[hostContentBundle.Length + 1];
-            message[0] = MsgContent;
-            Buffer.BlockCopy(hostContentBundle, 0, message, 1, hostContentBundle.Length);
-            session.SendTo(member.Connection, message, 0, message.Length);
-            member.ContentHash = hostContentHash;
+            if (member.ContentBundle != null && member.ContentSending == hostContentHash) return; // already on its way
+            member.ContentBundle = hostContentBundle;
+            member.ContentSending = hostContentHash;
+            member.ContentNext = 0;
+            member.ContentAcked = -1;
+            Debug.Log($"[Online] Sending the room's content to {member.Name}: {ContentPartCount(hostContentBundle.Length)} parts, {hostContentBundle.Length / 1024} KB.");
+        }
+
+        private static void StopContentTransfer(Member member)
+        {
+            member.ContentBundle = null;
+            member.ContentSending = string.Empty;
+            member.ContentNext = 0;
+            member.ContentAcked = -1;
+        }
+
+        // The host, every frame: the next parts for each computer that is getting the content (no allocation).
+        private void TickContent()
+        {
+            for (int i = 0; i < members.Count; i++)
+            {
+                Member member = members[i];
+                if (member.ContentBundle == null) continue;
+                if (member.IsHost || !member.Connected || member.Connection < 0 || hostContentBundle == null)
+                {
+                    StopContentTransfer(member); // gone (a rejoin starts again from part 0), or the room's content was dropped
+                    continue;
+                }
+
+                if (member.ContentSending != hostContentHash)
+                {
+                    StopContentTransfer(member); // the host's content changed meanwhile: start again with the new one
+                    SendContent(member);
+                    if (member.ContentBundle == null) continue;
+                }
+
+                int length = member.ContentBundle.Length;
+                int count = ContentPartCount(length);
+                int sent = 0;
+                while (member.ContentNext < count && member.ContentNext - (member.ContentAcked + 1) < ContentPartsInFlight && sent++ < ContentPartsPerFrame)
+                {
+                    if (contentPartBuffer == null) contentPartBuffer = new byte[ContentPartHeader + ContentPartBytes];
+                    int index = member.ContentNext++;
+                    int offset = index * ContentPartBytes;
+                    int chunk = Math.Min(ContentPartBytes, length - offset);
+                    contentPartBuffer[0] = MsgContentPart;
+                    PutInt(contentPartBuffer, 1, index);
+                    PutInt(contentPartBuffer, 5, count);
+                    PutInt(contentPartBuffer, 9, length);
+                    Buffer.BlockCopy(member.ContentBundle, offset, contentPartBuffer, ContentPartHeader, chunk);
+                    session.SendTo(member.Connection, contentPartBuffer, 0, ContentPartHeader + chunk);
+                }
+            }
+        }
+
+        // The host: a joined computer has a part. Acks outside the transfer (no transfer, an index never sent) are ignored.
+        private void ReadContentAck(Member member, byte[] data)
+        {
+            if (member.ContentBundle == null || data.Length < 5) return;
+            int count = ContentPartCount(member.ContentBundle.Length);
+            int index = BitConverter.ToInt32(data, 1);
+            if (index < 0 || index >= count || index >= member.ContentNext) return;
+            if (index > member.ContentAcked) member.ContentAcked = index;
+            if (member.ContentAcked < count - 1) return;
+            member.ContentHash = member.ContentSending; // only now does the computer count as having the content
+            StopContentTransfer(member);
+            Debug.Log($"[Online] Sending the room's content to {member.Name}: done.");
         }
 
         private void SendContentToRoom()
@@ -212,6 +303,52 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // ---------- a joined computer ----------
+
+        // CONTENT-1: one part of the host's content. Part 0 starts (or restarts) the transfer; the others must follow in order.
+        private void ReadContentPart(byte[] data)
+        {
+            if (data.Length <= ContentPartHeader) return;
+            int index = BitConverter.ToInt32(data, 1);
+            int count = BitConverter.ToInt32(data, 5);
+            int total = BitConverter.ToInt32(data, 9);
+            if (total <= 0 || total > MaxContentBytes + ContentBundleMargin || count != ContentPartCount(total) || index < 0 || index >= count) return;
+            int chunk = data.Length - ContentPartHeader;
+            if (chunk != (index == count - 1 ? total - index * ContentPartBytes : ContentPartBytes)) return;
+            if (index == 0)
+            {
+                contentIncoming = new byte[total + 1];
+                contentIncoming[0] = MsgContent;
+                contentIncomingParts = 0;
+                contentIncomingCount = count;
+                contentIncomingStep = 0;
+            }
+            else if (contentIncoming == null || count != contentIncomingCount || total != contentIncoming.Length - 1 || index != contentIncomingParts)
+            {
+                return; // not part of the transfer in progress
+            }
+
+            Buffer.BlockCopy(data, ContentPartHeader, contentIncoming, 1 + index * ContentPartBytes, chunk);
+            contentIncomingParts = index + 1;
+            BeginMessage(MsgContentAck);
+            writer.Write(index);
+            SendToHost();
+            if (contentIncomingParts < count)
+            {
+                int step = contentIncomingParts * 10 / count;
+                if (step > contentIncomingStep)
+                {
+                    contentIncomingStep = step;
+                    host.ShowMessage($"Getting the host's cards and pictures… {step * 10}%");
+                }
+
+                return;
+            }
+
+            byte[] bundle = contentIncoming;
+            contentIncoming = null;
+            Debug.Log($"[Online] The host's content arrived: {count} parts, {total / 1024} KB.");
+            ReadContent(bundle);
+        }
 
         // The host's content arrived: written to the room's folder, read from now on, and a table that waited for it
         // is dealt.
@@ -273,6 +410,7 @@ namespace ConsoleCards.Presentation.Composition
         private void ForgetRoomContent()
         {
             waitingForContent = null;
+            contentIncoming = null; // CONTENT-1
             hostContentBundle = null;
             hostContentHash = string.Empty;
             hostContentFiles = string.Empty;

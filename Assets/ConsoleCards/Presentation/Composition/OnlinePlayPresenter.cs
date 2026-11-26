@@ -65,9 +65,24 @@ namespace ConsoleCards.Presentation.Composition
 
         private const string RejoinFileName = "rejoin.txt";
 
+        // ONLINE-FIX (owner, 2026-11-25): two running copies on one profile share the saved seat key, so the joining copy
+        // sent the host's own key and was sent away. That copy now joins once more with a key of its own for this room
+        // (not saved: a restart of that copy does not get the seat back).
+        private const string HostKeyReason = "That seat key belongs to the host.";
+        private static string freshKeyRoom;
+        private string pendingFreshJoin;
+        private bool freshJoinDue; // the lobby is back: join on the next Tick, not inside the session's own call
+
         // The saved key for this room (renewed), or a new one saved for next time. Never sent anywhere but the hello.
         private void UseRejoinKey(string roomCode)
         {
+            if (!string.IsNullOrEmpty(freshKeyRoom) && string.Equals(freshKeyRoom, roomCode, StringComparison.Ordinal))
+            {
+                clientKey = Guid.NewGuid(); // ONLINE-FIX: this profile hosts the room in another copy
+                Debug.Log("[Online] Using a new seat key for this room (this profile hosts it in another running copy).");
+                return;
+            }
+
             try
             {
                 string folder = System.IO.Path.Combine(host.EnsureProfile().ActiveFolder, "online");
@@ -124,6 +139,10 @@ namespace ConsoleCards.Presentation.Composition
             public float StagedCleanupAt = -1f; // host only, P7: when a departed guest's staged payment goes back
             public long SentSeq; // host only: ordered messages sent to this computer
             public string ContentHash = string.Empty; // host only: the host content this computer has (MP-4)
+            public byte[] ContentBundle; // host only, CONTENT-1: the bundle being sent to it in parts (null: no transfer)
+            public string ContentSending = string.Empty; // host only, CONTENT-1: the hash of that bundle
+            public int ContentNext; // host only, CONTENT-1: the next part to send
+            public int ContentAcked = -1; // host only, CONTENT-1: the highest part it confirmed
             public float LastHeardAt = -1f; // host only, audit T-3: when anything last came from it
             public bool SendsAlive; // host only, audit T-3: it says "still here", so its silence means it is gone
             public readonly Inbox FromClient = new Inbox(); // host only: ordered messages from it
@@ -412,6 +431,10 @@ namespace ConsoleCards.Presentation.Composition
                 hostLossCheck = true; // MP-5: next frame (not inside the session's own call): the next player may take over
             }
 
+            // ONLINE-FIX: leaving goes Offline first and only then back to the lobby; the session takes a join only from
+            // the lobby, so the new join waits for InLobby and runs on the next Tick.
+            if (!string.IsNullOrEmpty(pendingFreshJoin) && now == MultiplayerSessionState.InLobby) freshJoinDue = true;
+
             RefreshFrontEnd();
         }
 
@@ -564,12 +587,21 @@ namespace ConsoleCards.Presentation.Composition
                 if (session.State == MultiplayerSessionState.Reconnecting) HostMayHaveLeft();
             }
 
+            if (freshJoinDue)
+            {
+                freshJoinDue = false;
+                string code = pendingFreshJoin; // ONLINE-FIX: out of the room again, so join with the new key
+                pendingFreshJoin = null;
+                if (!string.IsNullOrEmpty(code) && session.State == MultiplayerSessionState.InLobby) JoinRoom(code);
+            }
+
             if (hosting) TickHostRoom(now);
             if (hosting)
             {
                 TickSilentMembers(now); // audit T-3
                 TickJoinRequests(now); // late join by request
                 TickOffer(now); // audit C-4
+                TickContent(); // CONTENT-1: the next parts of the content for joined computers
             }
             else
             {
@@ -664,6 +696,9 @@ namespace ConsoleCards.Presentation.Composition
                     if (!sharedTable) MoveSeat(member, BitConverter.ToInt32(data, 1));
                     BroadcastRoster();
                     RefreshFrontEnd();
+                    break;
+                case MsgContentAck: // CONTENT-1
+                    ReadContentAck(member, data);
                     break;
                 case MsgUndo:
                     if (IsWatcher(member)) { RefuseFromWatcher(member, type); break; } // M1a: no seat, no Undo
@@ -787,6 +822,7 @@ namespace ConsoleCards.Presentation.Composition
             member.SentSeq = 0;
             member.FromClient.Reset();
             member.ContentHash = contentHash;
+            StopContentTransfer(member); // CONTENT-1: a new connection gets the content again from part 0
             BeginMessage(MsgWelcome);
             SendTo(member);
             BroadcastRoster();
@@ -844,6 +880,9 @@ namespace ConsoleCards.Presentation.Composition
                 case MsgContent:
                     ReadContent(data);
                     break;
+                case MsgContentPart: // CONTENT-1
+                    ReadContentPart(data);
+                    break;
                 case MsgNotice:
                     ReadNotice(data);
                     break;
@@ -852,6 +891,16 @@ namespace ConsoleCards.Presentation.Composition
                         BinaryReader reader = Reader(data);
                         reader.ReadByte();
                         notice = reader.ReadString();
+                        if (string.Equals(notice, HostKeyReason, StringComparison.Ordinal) && !hosting
+                            && !string.IsNullOrEmpty(lastRoomCode)
+                            && !string.Equals(freshKeyRoom, lastRoomCode, StringComparison.Ordinal))
+                        {
+                            // ONLINE-FIX: the same profile hosts this room in another window; join again as another player.
+                            freshKeyRoom = lastRoomCode;
+                            pendingFreshJoin = lastRoomCode;
+                            notice = "This profile already hosts this room in another window: joining as a separate player…";
+                        }
+
                         host.ShowMessage(notice);
                         session.LeaveRoom();
                         break;
@@ -890,6 +939,7 @@ namespace ConsoleCards.Presentation.Composition
 
             Member me = Me();
             myPlayer = me != null ? me.Player : Guid.Empty;
+            CheckOwnSeat("the room's seat list"); // SEAT-1
             RefreshFrontEnd();
         }
 
@@ -1225,7 +1275,7 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = 0; i < members.Count; i++)
             {
                 Member member = members[i];
-                bool watching = sharedTable && member.Player == Guid.Empty;
+                bool watching = sharedTable && (member.Player == Guid.Empty || !seatPlayers.Contains(member.Player)); // SEAT-1
                 string tags = member.IsHost ? "HOST" : !member.Connected ? "RECONNECTING…" : member.Ready ? "READY" : "NOT READY";
                 if (watching) tags = member.Connected ? "WATCHING" : "AWAY";
                 if (member == me) tags = "YOU  ·  " + tags;
@@ -1255,8 +1305,8 @@ namespace ConsoleCards.Presentation.Composition
             model.CanReady = me != null && !hosting;
             model.ColourName = me != null ? TabletopComposition.ColourNameByIndex(me.Colour) : string.Empty;
             model.Colour = me != null ? TabletopComposition.ColourByIndex(me.Colour) : Color.grey;
-            int mine = me != null ? members.IndexOf(me) : -1;
-            model.SeatText = mine >= 0 ? $"Seat {mine + 1} of {members.Count}" : string.Empty;
+            int mine = me == null || (sharedTable && me.Player == Guid.Empty) ? -1 : SeatNumberOf(me, members.IndexOf(me)); // SEAT-1: the seat played
+            model.SeatText = mine >= 0 ? $"Seat {mine + 1} of {seats}" : string.Empty;
             model.CanChangeSeat = !sharedTable && members.Count > 1;
             model.AllReady = hosting ? AllReady() : true;
             model.Seats = seats;

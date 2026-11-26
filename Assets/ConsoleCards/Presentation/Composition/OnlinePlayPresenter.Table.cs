@@ -106,6 +106,10 @@ namespace ConsoleCards.Presentation.Composition
         // P-CAM: the guest came from the room to a new game's table; the opening camera move plays once it is here.
         private bool introOnArrival;
 
+        // SEAT-1 (owner, 2026-11-25: "we are both Player 1"): the next table from the host is dealt again here, because this
+        // computer was showing a seat that is not the one the host's roster gives it.
+        private bool rebuildForSeat;
+
         /// <summary>True while this table is shared with the room.</summary>
         internal bool TableShared => sharedTable;
 
@@ -195,7 +199,8 @@ namespace ConsoleCards.Presentation.Composition
                 Member member = members[i];
                 if (i < seats)
                 {
-                    if (member.Player == Guid.Empty) member.Player = Guid.NewGuid();
+                    // SEAT-1: every seat is its own; a seat id kept from an earlier game is never shared by two members.
+                    if (member.Player == Guid.Empty || seatPlayers.Contains(member.Player)) member.Player = Guid.NewGuid();
                     seatPlayers.Add(member.Player);
                 }
                 else
@@ -246,7 +251,7 @@ namespace ConsoleCards.Presentation.Composition
         // An open seat for a player who joins a game in progress (null: none, they watch).
         private Guid OpenSeat()
         {
-            for (int i = 0; i < seatPlayers.Count; i++)
+            for (int i = 0; i < seatPlayers.Count && i < tablePlayerCount; i++) // SEAT-1: only seats the table has
             {
                 Guid seat = seatPlayers[i];
                 bool taken = false;
@@ -344,6 +349,20 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             tablePlayerCount = count;
+            // SEAT-1: the room's seat list is the table's; a member whose seat the table does not have watches this game
+            // (it was shown the first seat, the host's, before).
+            if (seatPlayers.Count > count) seatPlayers.RemoveRange(count, seatPlayers.Count - count);
+            bool watchersChanged = false;
+            for (int i = 0; i < members.Count; i++)
+            {
+                Member member = members[i];
+                if (member.IsHost || member.Player == Guid.Empty || seatPlayers.Contains(member.Player)) continue;
+                Debug.Log($"[Online] {member.Name} has no seat on this {count}-player table and watches it.");
+                member.Player = Guid.Empty;
+                watchersChanged = true;
+            }
+
+            if (watchersChanged) BroadcastRoster();
             requester = TablePlayerHere(players);
         }
 
@@ -357,7 +376,20 @@ namespace ConsoleCards.Presentation.Composition
                 if (players[i].Value == mine) return players[i];
             }
 
+            // SEAT-1: not known yet (the roster comes apart from the table). CheckOwnSeat deals the table again once it is.
+            if (!hosting) Debug.Log("[Online] This computer's seat is not on the table yet: showing the first seat until the host's seat list arrives.");
             return players[0];
+        }
+
+        // SEAT-1: a joined computer plays the seat the host's roster gives it. A table built before that seat was known
+        // showed the first seat (the host's); it is dealt again with the right one.
+        private void CheckOwnSeat(string why)
+        {
+            if (hosting || !sharedTable || applying || myPlayer == Guid.Empty || !host.IsInitialized) return;
+            if (host.localPlayerId.Value == myPlayer || !seatPlayers.Contains(myPlayer)) return;
+            Debug.Log($"[Online] This computer showed another seat than its own ({why}): asking for the host's table to deal it again.");
+            rebuildForSeat = true;
+            RequestTable("this computer's seat was wrong");
         }
 
         // ---------- every frame ----------
@@ -1065,7 +1097,8 @@ namespace ConsoleCards.Presentation.Composition
                     currentColours = setup.Colours;
                 }
 
-                bool another = host.activeSession == null || host.matchState == null || host.matchState.Id.Value != setup.MatchId;
+                bool another = rebuildForSeat || host.activeSession == null || host.matchState == null || host.matchState.Id.Value != setup.MatchId;
+                rebuildForSeat = false;
                 ok = true;
                 if (another)
                 {
@@ -1111,6 +1144,7 @@ namespace ConsoleCards.Presentation.Composition
             mismatches = 0;
             if (host.matchState != null) lastRevision = host.matchState.Revision;
             if (ok && !hosting) LinkTableArrived(); // P8A: the host's whole table is here: play may resume
+            if (ok) CheckOwnSeat("the host's table");
             if (introOnArrival)
             {
                 introOnArrival = false;
