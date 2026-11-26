@@ -15,6 +15,9 @@ namespace ConsoleCards.Presentation.Composition
         [SerializeField] private GameObject validTargetFeedbackRoot;
         [SerializeField] private GameObject sourceTargetFeedbackRoot;
         [SerializeField] private GameObject invalidTargetFeedbackRoot;
+        // PINK-1 (owner, 2026-11-26): the slot's "source" look renders as a solid magenta block (see SLOT-HINT in TabletopComposition.Consoles.cs).
+        // Off until the source feedback material in the Console slot prefab is fixed; then tick this.
+        [SerializeField] private bool showSourceLook;
 
         public ConsoleSlotView SlotView => slotView;
 
@@ -66,7 +69,8 @@ namespace ConsoleCards.Presentation.Composition
 
         public void ShowSourceTarget()
         {
-            SetFeedback(sourceTargetFeedbackRoot);
+            // PINK-1: lifting a card out of a Console slot (and hovering back over it) made the slot turn pink.
+            SetFeedback(showSourceLook ? sourceTargetFeedbackRoot : null);
         }
 
         public void ShowInvalidTarget()

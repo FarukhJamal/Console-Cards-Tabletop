@@ -119,6 +119,7 @@ namespace ConsoleCards.Presentation.Composition
         private readonly HashSet<PlayerId> avatarDraftSeen = new HashSet<PlayerId>();
         private readonly Dictionary<PlayerId, float> avatarDraftSentAt = new Dictionary<PlayerId, float>();
         private object avatarDraftMatch;
+        private MatchId avatarDraftMatchId; // AVATAR-FIRST
         private PlayerId avatarDraftOpenHere = PlayerId.Empty;
 
         // Polish (owner, 2026-11-13): an Avatar someone has locked stays in the popup, greyed and "Taken by X"; when another
@@ -151,7 +152,10 @@ namespace ConsoleCards.Presentation.Composition
             {
                 avatarDraftMatch = host.matchState;
                 avatarDraftAsked.Clear();
-                avatarDraftLater.Clear();
+                // AVATAR-FIRST: a "Later" answer survives a rebuild of the same table (a resync), so the host's and the other
+                // computers' picture of who has answered does not reset; a new table (new match) starts clean.
+                if (!avatarDraftMatchId.Equals(host.matchState.Id)) avatarDraftLater.Clear();
+                avatarDraftMatchId = host.matchState.Id;
                 avatarDraftSeen.Clear();
                 avatarDraftSentAt.Clear();
                 avatarDraftOpenHere = PlayerId.Empty;
@@ -320,10 +324,78 @@ namespace ConsoleCards.Presentation.Composition
                 {
                     host.runtimeUi?.CloseFocusedCardSelection();
                     avatarDraftLater.Add(player);
+                    TellHostAvatarLater(player); // AVATAR-FIRST
                     if (avatarDraftOpenHere == player) avatarDraftOpenHere = PlayerId.Empty;
                     host.ShowMessage("No Avatar chosen: drag one from the Avatar pile into your Console's Main slot when you are ready.");
                 },
                 "Later") { Spread = true };
+        }
+
+        // AVATAR-FIRST (owner, 2026-11-26): a joined computer tells the others (the host first) that its player pressed Later.
+        private void TellHostAvatarLater(PlayerId player)
+        {
+            if (!(host.HasOnline && host.Online.IsJoinedSharedClient) || !host.IsPlayerOnThisComputer(player)) return;
+            host.TableAuthority.Submit<TrapFloorAvatarLaterCommand, TrapFloorEffectResult>(
+                new TrapFloorAvatarLaterCommand(host.CreateCommandContext(player)));
+        }
+
+        // AVATAR-FIRST: runs on every computer (the command changes no table state, it only records the answer).
+        private TrapFloorEffectResult NoteAvatarLater(TrapFloorAvatarLaterCommand command)
+        {
+            avatarDraftLater.Add(command.Context.RequestedByPlayerId);
+            return TrapFloorEffectResult.Accepted(host.matchState != null ? host.matchState.Revision : 0);
+        }
+
+        /// <summary>
+        /// AVATAR-FIRST (owner, 2026-11-26: "the buying phase starts even when the avatar selection phase is in progress"):
+        /// true while the Avatar question of this floor's first round is still open for some seat (Full only; a seat with an
+        /// Avatar or that pressed Later has answered). The Buy Phase is not dealt, announced or played until this is false.
+        /// Allocation free.
+        /// </summary>
+        internal bool AvatarChoicePending()
+        {
+            TrapFloorTurnState turn = host.trapFloorTurnState;
+            if (PlayAssist.Level != PlayAssistLevel.Full || turn == null || host.trapFloorTemplate == null || host.matchState == null
+                || host.runtimeUi == null || turn.CurrentRound > 1 || host.privateViewActive) return false;
+            if (host.HasOnline && (host.Online.IsPrivateGuest || host.Online.TableIsStale)) return false;
+            // A joined computer is also released by the host's deal (the dealt flag travels with the table).
+            if (!IsDealingComputer && turn.IsBuyPhaseDealt) return false;
+            if (!host.matchState.Containers.TryGetValue(TrapFloorTemplateFactory.AvatarDeckId, out ContainerState pile) || pile.Count == 0) return false;
+            if (!ReferenceEquals(avatarDraftMatch, host.matchState)) return true; // the draft has not looked at this table yet
+            int seats = Math.Min(host.trapFloorTemplate.Players.Count, MaxAvatarSeats);
+            for (int i = 0; i < seats; i++)
+            {
+                TrapFloorPlayerSetupDefinition setup = host.trapFloorTemplate.Players[i];
+                if (!host.matchState.Seats.TryGetValue(setup.SeatId, out SeatState seat) || seat.OccupantPlayerId.IsEmpty) continue;
+                if (!avatarDraftLater.Contains(seat.OccupantPlayerId) && !TryGetSeatAvatar(setup, out _)) return StillWaitingForAvatars();
+            }
+
+            return false;
+        }
+
+        // AVATAR-FIRST / no soft-lock: online, a seat whose computer never answers (left, frozen) must not hold the whole
+        // table: after AvatarWaitSeconds the dealing computer (the host) starts the Buy Phase anyway. Allocation free.
+        private const float AvatarWaitSeconds = 90f;
+        private object avatarWaitMatch;
+        private float avatarWaitSince;
+
+        private bool StillWaitingForAvatars()
+        {
+            if (!IsDealingComputer || !host.IsOnlineTable) return true;
+            if (!ReferenceEquals(avatarWaitMatch, host.matchState))
+            {
+                avatarWaitMatch = host.matchState;
+                avatarWaitSince = UnityEngine.Time.unscaledTime;
+            }
+
+            if (UnityEngine.Time.unscaledTime - avatarWaitSince < AvatarWaitSeconds) return true;
+            if (avatarWaitSince >= 0f)
+            {
+                avatarWaitSince = -1f - AvatarWaitSeconds; // once per table
+                UnityEngine.Debug.Log($"[Phase] Avatar choice timed out after {AvatarWaitSeconds:0} s: the Buy Phase starts without the missing answers.");
+            }
+
+            return false;
         }
 
         // Each frame of the draft: the number of seats holding an Avatar. A seat that has just got one is announced

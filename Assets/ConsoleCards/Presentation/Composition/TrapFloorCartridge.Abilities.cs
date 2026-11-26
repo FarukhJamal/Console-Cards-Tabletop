@@ -892,6 +892,12 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            if (host.trapFloorTurnState != null && AvatarChoicePending())
+            {
+                host.ShowMessage("Choose your Avatar first (or Later)."); // AVATAR-FIRST
+                return;
+            }
+
             if (host.trapFloorTurnState != null && BuyerId.IsEmpty)
             {
                 host.ShowMessage("You have finished buying: the others are still buying."); // Buy Phase

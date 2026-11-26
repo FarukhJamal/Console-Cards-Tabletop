@@ -259,7 +259,7 @@ namespace ConsoleCards.Presentation.Composition
                 $"Seat: {host.PlayerLabel(host.localPlayerId)}",
                 host.NextScreenSeat,
                 host.hotSeatMode,
-                host.SetHotSeatMode);
+                host.IsOnlineTable ? (Action<bool>)null : host.SetHotSeatMode); // HOTSEAT-TABLE: no Hot seat switch in online play
             // Card art, the card editor and the deck editor live in the game selection menu (L2-4), not on the table.
             host.runtimeUi.ShowCardArtEntry(null);
             host.CardEditorPanel.RefreshCardEditorEntry(); // L2-2: the game's cards and yours, on every table

@@ -1225,9 +1225,13 @@ namespace ConsoleCards.Presentation.Composition
             host.trapFloorNextStageIndex = setup.FloorIndex == 0 ? Math.Max(0, setup.StageIndex) : host.trapFloorStageIndex;
             host.trapFloorCarriedAvatars = AvatarsFromSetup(setup.CarriedAvatars); // P8A: the same Avatars in place as the host's deal
             if (!hosting) host.RulesCardPanel.ReloadHouseRules(setup.RuleSetId); // MP-4: the host's house rules
+            // FLOOR-TILES-SMOOTH (owner, 2026-11-26): the next floor's tiles glide from where the old ones lay (a joined computer).
+            bool slideTiles = !hosting && host.trapFloorTemplate != null && host.trapFloorTemplate.FloorIndex != setup.FloorIndex
+                && host.TrapFloorGame.CaptureFloorTilesBeforeDeal();
             try
             {
                 bool built = host.SessionService.TryReplaceTable(selection, setup.DealPlayers);
+                if (built && slideTiles && host.trapFloorTemplate != null) host.TrapFloorGame.SlideFloorTilesAfterDeal();
                 if (!built) error = host.gameTemplatesPanelError ?? "the table could not be set up";
                 if (built && !hosting) UseHostsPlayerGame(setup.PlayerGame);
                 return built;

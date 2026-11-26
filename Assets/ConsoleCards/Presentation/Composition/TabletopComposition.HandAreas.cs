@@ -29,7 +29,7 @@ namespace ConsoleCards.Presentation.Composition
         [SerializeField, Min(0f)] private float handBesideConsoleCards = 0.5f;
 
         [Tooltip("HAND-3: how much further past the table's edge (card widths, added to the usual 0.45) your hand area lies.")]
-        [SerializeField, Min(0f)] private float handAwayFromTableCards = 0.6f;
+        [SerializeField, Min(0f)] private float handAwayFromTableCards = 1.2f;
 
         private readonly List<Renderer> handSideRenderers = new List<Renderer>(16); // HAND-3: no allocation per frame
 

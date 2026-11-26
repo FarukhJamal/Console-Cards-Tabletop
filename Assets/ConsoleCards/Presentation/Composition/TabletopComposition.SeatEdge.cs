@@ -180,8 +180,18 @@ namespace ConsoleCards.Presentation.Composition
             {
                 if (matchState.TryGetContainerPlacement(seatContainers[i], out ContainerPlacementState placement))
                 {
+                    // HAND-OFF-TABLE (owner, 2026-11-26): a seat's hand zone (where the others see its cards, shown or not) lies
+                    // past the table's edge, as this screen's own hand row does, not on the table.
+                    Vector3 containerShift = shift;
+                    if (!home && !handsOnTable
+                        && matchState.Containers.TryGetValue(seatContainers[i], out ContainerState moving)
+                        && moving.Kind == ContainerKind.Hand)
+                    {
+                        containerShift += HandZoneExtraPush(placement.Pose, shift, direction, inverse, unit);
+                    }
+
                     // A seat's own piles move for that seat's player (another player's pile cannot be moved).
-                    any |= SubmitSeatMove(seatContainers[i], placement.Pose, shift, CreateCommandContext(occupant));
+                    any |= SubmitSeatMove(seatContainers[i], placement.Pose, containerShift, CreateCommandContext(occupant));
                 }
             }
 
@@ -199,6 +209,19 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             return any;
+        }
+
+        // HAND-OFF-TABLE: the extra push (world) that puts a hand zone's centre past the table's edge, along its seat's
+        // direction: the edge, the rim, the same margins as this screen's hand row (HandRowPastEdgeCards +
+        // handAwayFromTableCards) and half the zone's depth. An absolute place, so running it again moves nothing more.
+        private Vector3 HandZoneExtraPush(TabletopPose from, Vector3 shift, Vector2 direction, Quaternion inverse, float unit)
+        {
+            Vector3 zone = coordinateConverter.ToWorldPosition(from) + shift;
+            TableSpec spec = HoldSpecFor(tableSpec);
+            float rim = IsBuiltShape(spec.shape) && spec.edge != TableEdge.None ? spec.edgeWidth * unit : 0f;
+            float past = (HandRowPastEdgeCards + handAwayFromTableCards + (0.5f * HandAreaDepthCards)) * WorldPerCardWidth();
+            float push = seatOutline.DistanceToEdge(direction) + rim - Vector2.Dot(TableFlat(zone, inverse), direction) + past;
+            return classicFrame.Rotation * new Vector3(direction.x * push, 0f, direction.y * push);
         }
 
         // The farthest place out along the direction where every corner of the seat's ground stands inside the edge

@@ -90,6 +90,12 @@ namespace ConsoleCards.Presentation.Views.Containers
         private bool trayHandoffActive;
         private float trayHandoffElapsed;
         private TrayMotion trayHandoffStart;
+        // HAND-4 (owner, 2026-11-26: "the cards that are populated are very small"): a card flying into the tray began at its
+        // table size. Its world size alone looked tiny in flight (the tray lies 0.75 from the camera, the table far off), so
+        // the flight eases the size the card has ON SCREEN from where it began to the tray's; the world scale follows from
+        // the card's distance to the camera. Entries live only while a card is flying in (no allocation per frame).
+        private readonly Dictionary<TabletopObjectId, TrayArrival> trayArrivals =
+            new Dictionary<TabletopObjectId, TrayArrival>();
         private Vector3 trayHandoffWorldPosition;
         private Quaternion trayHandoffWorldRotation;
 
@@ -811,6 +817,7 @@ namespace ConsoleCards.Presentation.Views.Containers
                     }
 
                     trayMotions.Remove(previousCard.ObjectId);
+                    trayArrivals.Remove(previousCard.ObjectId); // HAND-4
                 }
             }
 
@@ -898,6 +905,7 @@ namespace ConsoleCards.Presentation.Views.Containers
                 {
                     // Held on the table by a drag: forget the tray pose so it re-enters from wherever it is.
                     trayMotions.Remove(cardId);
+                    trayArrivals.Remove(cardId); // HAND-4
                     continue;
                 }
 
@@ -944,7 +952,8 @@ namespace ConsoleCards.Presentation.Views.Containers
                 if (Mathf.Abs(eased.y - targetPosition.y) < TrayDepthSnapRange) eased.y = targetPosition.y;
                 motion.Position = eased;
                 motion.Rotation = Quaternion.Slerp(motion.Rotation, targetRotation, settle);
-                motion.Scale = Mathf.Lerp(motion.Scale, targetScale, settle);
+                // HAND-4: a card still flying in grows by its size on screen (see trayArrivals), not by its world size.
+                motion.Scale = TrayArrivalScale(cardId, eased, targetPosition, targetScale, Mathf.Lerp(motion.Scale, targetScale, settle));
                 trayMotions[cardId] = motion;
                 ApplyTrayMotion(card, motion);
             }
@@ -956,6 +965,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             TrayMotion motion = trayMotions.TryGetValue(cardId, out TrayMotion current)
                 ? current
                 : CaptureTrayMotion(card);
+            float dragScale = Mathf.Lerp(motion.Scale, traySelectedScale, follow);
             if (TryGetTrayLocalPoint(trayDragScreenPosition, out Vector3 pointerLocal))
             {
                 Vector3 targetPosition = new Vector3(
@@ -963,16 +973,19 @@ namespace ConsoleCards.Presentation.Views.Containers
                     (pickOrder.Count * trayCardStep) + traySelectedLift,
                     pointerLocal.z + trayDragOffset.y);
                 motion.Position = Vector3.Lerp(motion.Position, targetPosition, follow);
+                // HAND-4: a card coming back from the table shrinks by its size on screen, not by its world size.
+                dragScale = TrayArrivalScale(cardId, motion.Position, targetPosition, traySelectedScale, dragScale);
             }
 
             motion.Rotation = Quaternion.Slerp(motion.Rotation, Quaternion.identity, follow);
-            motion.Scale = Mathf.Lerp(motion.Scale, traySelectedScale, follow);
+            motion.Scale = dragScale;
             trayMotions[cardId] = motion;
             ApplyTrayMotion(card, motion);
         }
 
         private void ApplyTrayHandoff(CardView card, float deltaTime)
         {
+            trayArrivals.Remove(card.ObjectId); // HAND-4: the handoff sets its own size
             trayHandoffElapsed += deltaTime;
             float t = trayHandoffDuration > 0f ? Mathf.Clamp01(trayHandoffElapsed / trayHandoffDuration) : 1f;
             // Ease-out: quick departure, gentle landing, so the switch to a held card happens at rest.
@@ -990,8 +1003,13 @@ namespace ConsoleCards.Presentation.Views.Containers
                 trayHandoffStart.Rotation,
                 Quaternion.Inverse(anchor.rotation) * trayHandoffWorldRotation,
                 eased);
-            // Interpolated in log space so the growth reads evenly as the card moves away.
-            motion.Scale = Mathf.Exp(Mathf.Lerp(Mathf.Log(startScale), Mathf.Log(targetScale), eased));
+            // HAND-4 (owner, 2026-11-26: the hand card is small while it is placed): the size on screen eases from the
+            // tray's to the table's, so the card does not shrink to a speck on the way (the log-space world scale did).
+            // The world scale is that size times the card's distance to the camera; at both ends it is the exact tray/table scale.
+            float startApparent = startScale * trayRig.Scale / TrayCameraDepth(anchor.TransformPoint(trayHandoffStart.Position));
+            float endApparent = targetScale * trayRig.Scale / TrayCameraDepth(trayHandoffWorldPosition);
+            motion.Scale = Mathf.Lerp(startApparent, endApparent, eased)
+                * TrayCameraDepth(anchor.TransformPoint(motion.Position)) / Mathf.Max(0.0001f, trayRig.Scale);
             trayMotions[card.ObjectId] = motion;
             ApplyTrayMotion(card, motion);
         }
@@ -1028,7 +1046,62 @@ namespace ConsoleCards.Presentation.Views.Containers
             motion.Position = anchor.InverseTransformPoint(card.transform.position);
             motion.Rotation = Quaternion.Inverse(anchor.rotation) * card.transform.rotation;
             motion.Scale = relativeScale;
+            // HAND-4: a card captured away from the tray size (a draw from a pile, a return from the table) flies in by its size on screen.
+            if (Mathf.Abs(relativeScale - 1f) > 0.1f)
+            {
+                trayArrivals[card.ObjectId] = new TrayArrival
+                {
+                    Apparent = relativeScale * trayRig.Scale / TrayCameraDepth(card.transform.position),
+                    Start = motion.Position
+                };
+            }
+            else
+            {
+                trayArrivals.Remove(card.ObjectId);
+            }
+
             return motion;
+        }
+
+        // HAND-4: how far in front of the camera a world point lies (1 for an orthographic camera, where distance does not change size).
+        private float TrayCameraDepth(Vector3 world)
+        {
+            var camera = trayRig.TargetCamera;
+            if (camera == null || camera.orthographic)
+            {
+                return 1f;
+            }
+
+            return Mathf.Max(0.01f, Vector3.Dot(world - camera.transform.position, camera.transform.forward));
+        }
+
+        // HAND-4: the tray scale of a card still flying in: its size on screen eases (smoothstep) from where it began to its
+        // size at rest by how much of the way it has come; the world scale is that size times the distance to the camera.
+        // Returns settledScale (the plain ease) for a card that is not flying in or has arrived.
+        private float TrayArrivalScale(
+            TabletopObjectId cardId,
+            Vector3 position,
+            Vector3 targetPosition,
+            float targetScale,
+            float settledScale)
+        {
+            if (!trayArrivals.TryGetValue(cardId, out TrayArrival arrival))
+            {
+                return settledScale;
+            }
+
+            float total = (arrival.Start - targetPosition).magnitude;
+            float done = total > 0.0001f ? 1f - Mathf.Clamp01((position - targetPosition).magnitude / total) : 1f;
+            if (done >= 0.995f)
+            {
+                trayArrivals.Remove(cardId);
+                return settledScale;
+            }
+
+            Transform anchor = trayRig.Anchor;
+            float rest = targetScale * trayRig.Scale / TrayCameraDepth(anchor.TransformPoint(targetPosition));
+            float apparent = Mathf.Lerp(arrival.Apparent, rest, done * done * (3f - (2f * done)));
+            return apparent * TrayCameraDepth(anchor.TransformPoint(position)) / Mathf.Max(0.0001f, trayRig.Scale);
         }
 
         private bool TryGetTrayLocalPoint(Vector2 screenPosition, out Vector3 local)
@@ -1126,6 +1199,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             trayExcludedCard = null;
             trayHandoffActive = false;
             trayMotions.Clear();
+            trayArrivals.Clear(); // HAND-4
         }
 
         private static Quaternion FlattenToRest(Quaternion current, Quaternion rest)
@@ -1155,6 +1229,13 @@ namespace ConsoleCards.Presentation.Views.Containers
             public Vector3 Position;
             public Quaternion Rotation;
             public float Scale;
+        }
+
+        // HAND-4: where a card began its flight into the tray (tray space) and the size it had on screen then.
+        private struct TrayArrival
+        {
+            public Vector3 Start;
+            public float Apparent;
         }
 
         private sealed class HandInteractionPose

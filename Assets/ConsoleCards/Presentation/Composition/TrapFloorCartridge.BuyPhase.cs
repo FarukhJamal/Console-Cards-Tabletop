@@ -76,6 +76,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private string BuyPhaseText()
         {
+            if (AvatarChoicePending()) return "BUY PHASE - CHOOSE AVATARS FIRST"; // AVATAR-FIRST
             PlayerId buyer = BuyerId;
             if (buyer.IsEmpty) return "BUY PHASE - WAITING FOR THE OTHERS";
             return host.TryGetSeatIndex(buyer, out int seatIndex)
@@ -86,6 +87,7 @@ namespace ConsoleCards.Presentation.Composition
         // The status card's step line (its first word names the HUD's step: "Buy" → SHOP PHASE).
         private string BuyPhaseGuidanceText()
         {
+            if (AvatarChoicePending()) return "Choose your Avatar first (or Later); the Buy Phase starts when every player has chosen."; // AVATAR-FIRST
             if (IsFloorSetupOpen) return FloorSetupStatusText(); // stage 2
             PlayerId buyer = BuyerId;
             if (buyer.IsEmpty)
@@ -115,6 +117,10 @@ namespace ConsoleCards.Presentation.Composition
             {
                 actions.Add(new PopupActionOption("Confirm Payment", payment.IsPaymentComplete, ConfirmPendingActionAbilityPurchase));
                 actions.Add(new PopupActionOption("Cancel Payment", true, CancelPendingActionAbilityPurchase));
+            }
+            else if (!buyer.IsEmpty && AvatarChoicePending())
+            {
+                actions.Add(new PopupActionOption("Choose your Avatar first (or Later)", false, () => { })); // AVATAR-FIRST
             }
             else if (!buyer.IsEmpty)
             {
@@ -152,6 +158,12 @@ namespace ConsoleCards.Presentation.Composition
             host.ContextMenus.CloseContextMenu();
             PlayerId buyer = BuyerId;
             if (!IsBuyPhase || buyer.IsEmpty) return;
+            if (AvatarChoicePending())
+            {
+                host.ShowMessage("Choose your Avatar first (or Later)."); // AVATAR-FIRST
+                return;
+            }
+
             if (IsPaymentBlocking())
             {
                 host.ShowMessage("Finish or cancel the current payment first.");
@@ -229,7 +241,16 @@ namespace ConsoleCards.Presentation.Composition
             PlayerId requester;
             switch (command)
             {
-                case TrapFloorFinishBuyingCommand finish: requester = finish.Context.RequestedByPlayerId; break;
+                case TrapFloorFinishBuyingCommand finish:
+                    requester = finish.Context.RequestedByPlayerId;
+                    if (requester == sender && AvatarChoicePending())
+                    {
+                        hostRefusal = "The host refused that: Avatars are still being chosen."; // AVATAR-FIRST
+                        return false;
+                    }
+
+                    break;
+                case TrapFloorAvatarLaterCommand later: requester = later.Context.RequestedByPlayerId; break; // AVATAR-FIRST
                 case TrapFloorBuyFromShopCommand buy: requester = buy.Context.RequestedByPlayerId; break;
                 case TrapFloorArrangeFloorCommand _:
                     // Stage 2: the host's own player passes (the host's commands meet this same check, audit A2).
@@ -262,6 +283,7 @@ namespace ConsoleCards.Presentation.Composition
         private int buyPhaseSeenRound = -1;
         private PlayerId buyPhaseSeenNext;
         private bool buyPhaseSeen;
+        private bool buyPhaseNoticeWaitsForAvatars; // AVATAR-FIRST
 
         // TickEarly: notices a Buy Phase that just opened (here or on the host), and deals it once on the dealing computer.
         internal void TickBuyPhase()
@@ -270,6 +292,7 @@ namespace ConsoleCards.Presentation.Composition
             if (turn == null || host.matchState == null || !turn.IsBuyPhase)
             {
                 buyPhaseSeen = false;
+                buyPhaseNoticeWaitsForAvatars = false;
                 return;
             }
 
@@ -285,7 +308,16 @@ namespace ConsoleCards.Presentation.Composition
                 OnBuyPhaseOpened();
             }
 
+            // AVATAR-FIRST (owner, 2026-11-26): the notice, then the deal, wait until every seat has locked an Avatar or pressed Later.
+            if (buyPhaseNoticeWaitsForAvatars && !AvatarChoicePending())
+            {
+                buyPhaseNoticeWaitsForAvatars = false;
+                AnnounceBuyPhase();
+                RefreshTrapFloorStatusUi();
+            }
+
             if (turn.IsBuyPhaseDealt
+                || AvatarChoicePending()
                 || !IsDealingComputer
                 || host.undoTransactionInProgress
                 || host.rebuildingFromUndo
@@ -303,6 +335,18 @@ namespace ConsoleCards.Presentation.Composition
         private void OnBuyPhaseOpened()
         {
             ForgetAbilityOffer();
+            if (AvatarChoicePending())
+            {
+                buyPhaseNoticeWaitsForAvatars = true; // AVATAR-FIRST: announced once the Avatars are chosen
+                RefreshTrapFloorStatusUi();
+                return;
+            }
+
+            AnnounceBuyPhase();
+        }
+
+        private void AnnounceBuyPhase()
+        {
             PlayerId buyer = BuyerId;
             if (buyer.IsEmpty) return;
             host.FeedbackLine(
@@ -500,7 +544,7 @@ namespace ConsoleCards.Presentation.Composition
                 host.presentationTransitions.AnimateCardsFromCurrentResults(
                     starts,
                     result.Succeeded ? host.handReflowDuration : host.returnDuration,
-                    result.Succeeded ? 0.08f : 0f); // HAND-1 (owner, 2026-11-26): one card after another (a deal moves many cards)
+                    result.Succeeded ? 0.035f : 0f);
             }
 
             return dealt;

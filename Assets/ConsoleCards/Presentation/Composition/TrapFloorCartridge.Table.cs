@@ -246,6 +246,9 @@ namespace ConsoleCards.Presentation.Composition
             authority.Register<TrapFloorFinishBuyingCommand, TrapFloorTurnAdvanceResult>(
                 command => host.trapFloorTurnService.FinishBuying(host.matchState, command.Context), result => result.Succeeded);
             authority.Observe<TrapFloorFinishBuyingCommand, TrapFloorTurnAdvanceResult>(OnBuyingFinished);
+            // AVATAR-FIRST (owner, 2026-11-26): "Later" on the Avatar question, told to every computer (the host deals on it).
+            authority.Register<TrapFloorAvatarLaterCommand, TrapFloorEffectResult>(
+                command => NoteAvatarLater(command), result => result.Succeeded);
             // Stage 2: the floor as the players laid it out, on every table (only the host, or one computer offline, sends it).
             authority.Register<TrapFloorArrangeFloorCommand, TrapFloorTurnAdvanceResult>(
                 command => host.trapFloorTurnService.ArrangeFloor(host.matchState, command), result => result.Succeeded);

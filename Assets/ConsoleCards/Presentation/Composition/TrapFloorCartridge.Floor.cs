@@ -500,6 +500,41 @@ namespace ConsoleCards.Presentation.Composition
                 0f)); // Free: never a countdown
         }
 
+        // FLOOR-TILES-SMOOTH (owner, 2026-11-26: tiles moved off the board by hand "should also be smooth when you end the
+        // floor"): the next floor is a new table, so its tiles used to pop in. The loose tiles' poses are kept by id before
+        // the old table goes, and the new tile with the same id glides from there to its place (presentation only; the
+        // state is the new table's as dealt). Event time; one small dictionary per floor change.
+        private readonly Dictionary<TabletopObjectId, ConsoleCards.Presentation.Interaction.TabletopTransformSnapshot> floorTilesBeforeDeal =
+            new Dictionary<TabletopObjectId, ConsoleCards.Presentation.Interaction.TabletopTransformSnapshot>();
+
+        internal bool CaptureFloorTilesBeforeDeal()
+        {
+            floorTilesBeforeDeal.Clear();
+            if (host.trapFloorTemplate == null || host.matchState == null || host.presentationTransitions == null) return false;
+            foreach (KeyValuePair<TabletopObjectId, CardInstanceState> pair in host.matchState.Cards)
+            {
+                if (!host.trapFloorTemplate.IsFloorCard(pair.Key) || !pair.Value.BaseState.ContainerId.IsEmpty) continue;
+                if (host.Registry.TryGetCardView(pair.Key, out CardView view) && view != null)
+                    floorTilesBeforeDeal[pair.Key] = host.presentationTransitions.Capture(view.transform);
+            }
+
+            return floorTilesBeforeDeal.Count > 0;
+        }
+
+        internal void SlideFloorTilesAfterDeal()
+        {
+            if (floorTilesBeforeDeal.Count == 0) return;
+            var starts = new Dictionary<Transform, ConsoleCards.Presentation.Interaction.TabletopTransformSnapshot>(floorTilesBeforeDeal.Count);
+            foreach (KeyValuePair<TabletopObjectId, ConsoleCards.Presentation.Interaction.TabletopTransformSnapshot> pair in floorTilesBeforeDeal)
+            {
+                if (host.Registry.TryGetCardView(pair.Key, out CardView view) && view != null) starts[view.transform] = pair.Value;
+            }
+
+            floorTilesBeforeDeal.Clear();
+            if (starts.Count > 0 && host.presentationTransitions != null)
+                host.presentationTransitions.AnimateCardsFromCurrentResults(starts, 0.5f, 0.06f);
+        }
+
         // Sets the table up again at the given floor (0 = a new game at full size, or the start of stage
         // <paramref name="stageIndex"/>), keeping the mode and seats.
         private void DealFloor(int floorIndex, int stageIndex = 0, bool keepRun = false)
@@ -515,6 +550,7 @@ namespace ConsoleCards.Presentation.Composition
             host.trapFloorCarriedAvatars = keepRun ? CaptureSeatAvatars() : null;
             List<TrapFloorCarriedAbility> carried = keepRun ? TrapFloorRunCarry.Capture(host.matchState, host.trapFloorTemplate) : null;
             bool dealt;
+            bool slideTiles = CaptureFloorTilesBeforeDeal(); // FLOOR-TILES-SMOOTH
             host.gameTemplatesPanelError = null; // NEXTFLOOR-1: only this deal's reason is reported
             host.keepTableMarksOnNewTable = keepRun; // MARKS-FLOOR
             try
@@ -531,6 +567,7 @@ namespace ConsoleCards.Presentation.Composition
 
             if (!dealt)
             {
+                floorTilesBeforeDeal.Clear();
                 if (host.IsOnlineTable && !(host.HasOnline && host.Online.IsHosting)) return; // a joined computer asked the host
                 // NEXTFLOOR-1: a failed deal used to be silent at the table (the reason only reached the Games panel).
                 string why = string.IsNullOrEmpty(host.gameTemplatesPanelError) ? "the reason is in the log" : host.gameTemplatesPanelError;
@@ -540,6 +577,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (host.trapFloorTemplate == null) return;
+            if (slideTiles) SlideFloorTilesAfterDeal(); // FLOOR-TILES-SMOOTH
             if (carried != null) ApplyCarriedAbilities(carried); // P8A: before the new table is shared
             ReviewFloorStanding("deal"); // P7 (s162): every floor holds one standing Grand Exit
             host.ShowMessage(floorIndex == 0

@@ -1081,6 +1081,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            TrackFloorDiceForCollapseMark(); // COLLAPSE-MARK
             if (host.physicalFloorCollapsePending || host.undoTransactionInProgress) return;
             if (host.trapFloorCollapseState.IsCollapsePending)
             {
@@ -1213,7 +1214,12 @@ namespace ConsoleCards.Presentation.Composition
 
             // AUTH-4 (authority audit, 2026-11-05): a collapse begun on another computer is finished there; a throw here
             // would be sent for a player this computer does not play and never run.
-            if (!host.IsPlayerOnThisComputer(host.physicalFloorCollapseActor)) return;
+            if (!host.IsPlayerOnThisComputer(host.physicalFloorCollapseActor))
+            {
+                MarkCollapseTargetForSpectator(); // COLLAPSE-MARK: every other computer shows the marked tile too
+                return;
+            }
+
             if (!FloorDiceRolledAsAsked()) return; // DICE-1: wait for the player's roll
 
             // ROUND-1 (owner, 2026-10-22: "after rolling the game records the tile and highlights it and gives a button to
@@ -1417,6 +1423,72 @@ namespace ConsoleCards.Presentation.Composition
 
         private string CollapsePreviewLabel() => $"Collapse tile {collapsePreviewTile}";
 
+        // COLLAPSE-MARK (owner, 2026-11-26: "the collapse highlighter is only appearing on the player who is collapsing. It
+        // should appear on every screen"): the computers that do not run the collapse mark the tile the settled floor dice
+        // point at from the table's own dice (no popup, no buttons: only the acting player presses Collapse). The dice are
+        // watched through their physical revision, so a throw made before the collapse was begun is known too. A few field
+        // checks and two dictionary lookups per frame; no allocation.
+        private TabletopObjectId collapseSpectatorMarkId;
+        private long spectatorDiceRevisionX = -1;
+        private long spectatorDiceRevisionY = -1;
+        private float spectatorDiceChangedAt = -100f;
+        private bool spectatorDiceTracked;
+        private bool spectatorPendingSeen;
+        private bool spectatorDiceThrown;
+
+        private long FloorDieRevision(TabletopObjectId dieId) =>
+            host.matchState != null && host.matchState.Dice.TryGetValue(dieId, out DieState die) ? die.BaseState.PhysicalRevision : -1;
+
+        private void TrackFloorDiceForCollapseMark()
+        {
+            if (host.trapFloorTemplate == null || host.matchState == null) return;
+            long revisionX = FloorDieRevision(host.trapFloorTemplate.FloorfallXAxisDieId);
+            long revisionY = FloorDieRevision(host.trapFloorTemplate.FloorfallYAxisDieId);
+            if (spectatorDiceTracked && revisionX == spectatorDiceRevisionX && revisionY == spectatorDiceRevisionY) return;
+            if (spectatorDiceTracked)
+            {
+                spectatorDiceChangedAt = Time.unscaledTime;
+                if (spectatorPendingSeen) spectatorDiceThrown = true; // thrown while this collapse waits
+            }
+
+            spectatorDiceTracked = true;
+            spectatorDiceRevisionX = revisionX;
+            spectatorDiceRevisionY = revisionY;
+        }
+
+        private void MarkCollapseTargetForSpectator()
+        {
+            if (host.trapFloorTemplate == null || host.matchState == null || host.trapFloorCollapseState == null) return;
+            TrackFloorDiceForCollapseMark();
+            if (!spectatorPendingSeen)
+            {
+                spectatorPendingSeen = true;
+                // The collapse began right after the throw that settled (the acting computer reads it at once): that throw counts.
+                spectatorDiceThrown = Time.unscaledTime - spectatorDiceChangedAt < 6f;
+            }
+
+            PhysicalObjectState dieX = DiePhysicalState(host.trapFloorTemplate.FloorfallXAxisDieId);
+            PhysicalObjectState dieY = DiePhysicalState(host.trapFloorTemplate.FloorfallYAxisDieId);
+            TabletopObjectId mark = TabletopObjectId.Empty;
+            TrapFloorCoordinate tile = default;
+            bool pointing = spectatorDiceThrown
+                && dieX != null && dieY != null
+                && dieX.Mode == PhysicalObjectMode.Sleeping && dieY.Mode == PhysicalObjectMode.Sleeping
+                && Time.unscaledTime - spectatorDiceChangedAt >= DiceResultPauseSeconds
+                && TryPreviewCollapseTarget(out mark, out tile);
+            if (!pointing) mark = TabletopObjectId.Empty;
+            if (mark == collapseSpectatorMarkId) return;
+            collapseSpectatorMarkId = mark;
+            if (mark.IsEmpty)
+            {
+                host.floorfallTargetPresenter?.Clear();
+                return;
+            }
+
+            ShowFloorfallTarget(mark);
+            host.FeedbackLine($"The floor dice point at tile {tile}: it is marked on the board.", FeedbackSeverity.Info);
+        }
+
         /// <summary>Editor scenarios (2026-11-17): the tile the floor dice point at, waiting for Collapse (null: none).</summary>
         internal TrapFloorCoordinate? CollapsePreviewTileForScenario => collapsePreviewId.IsEmpty ? null : collapsePreviewTile;
 
@@ -1426,6 +1498,9 @@ namespace ConsoleCards.Presentation.Composition
             bool wasShown = !collapsePreviewId.IsEmpty;
             collapsePreviewId = TabletopObjectId.Empty;
             collapseConfirmed = false;
+            collapseSpectatorMarkId = TabletopObjectId.Empty; // COLLAPSE-MARK
+            spectatorPendingSeen = false;
+            spectatorDiceThrown = false;
             host.floorfallTargetPresenter?.Clear();
             if (wasShown) CloseFocusedSearchReveal();
         }
@@ -1509,7 +1584,7 @@ namespace ConsoleCards.Presentation.Composition
             host.presentationTransitions.AnimateCardsFromCurrentResults(
                 starts,
                 result.Succeeded ? host.handReflowDuration : host.returnDuration,
-                result.Succeeded ? TabletopComposition.HandDrawGapSeconds : 0f); // HAND-1 (owner, 2026-11-26): one card after another
+                result.Succeeded ? 0.035f : 0f);
             host.FeedbackLine(
                 result.Succeeded
                     ? $"{FormatPlayerName(active)} drew {need} Controller Card{(need == 1 ? string.Empty : "s")}."

@@ -165,6 +165,20 @@ namespace ConsoleCards.Games.TrapFloor
     }
 
     /// <summary>
+    /// AVATAR-FIRST (owner, 2026-11-26): the requesting player pressed Later on the Avatar question. Changes no table
+    /// state; every computer notes it, so the host knows when every seat has answered and may open the Buy Phase.
+    /// </summary>
+    public sealed class TrapFloorAvatarLaterCommand : ITabletopCommand
+    {
+        public TrapFloorAvatarLaterCommand(CommandContext context)
+        {
+            Context = context;
+        }
+
+        public CommandContext Context { get; }
+    }
+
+    /// <summary>
     /// Stage 2 (owner, 2026-11-17): the players have laid the floor out themselves; each cell is now the tile they put
     /// there (the floor tiles in the order of the cells, row 1 from column 1). Sent by the host, or offline by anyone.
     /// </summary>
