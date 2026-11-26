@@ -516,12 +516,14 @@ namespace ConsoleCards.Presentation.Composition
             List<TrapFloorCarriedAbility> carried = keepRun ? TrapFloorRunCarry.Capture(host.matchState, host.trapFloorTemplate) : null;
             bool dealt;
             host.gameTemplatesPanelError = null; // NEXTFLOOR-1: only this deal's reason is reported
+            host.keepTableMarksOnNewTable = keepRun; // MARKS-FLOOR
             try
             {
                 dealt = host.SessionService.TryReplaceTable(host.activeSession.Selection);
             }
             finally
             {
+                host.keepTableMarksOnNewTable = false;
                 host.trapFloorNextFloorIndex = 0;
                 host.trapFloorNextStageIndex = 0;
                 host.trapFloorCarriedAvatars = null;

@@ -85,8 +85,10 @@ namespace ConsoleCards.Games.TrapFloor
             if (f.Sender != f.PawnOwner) return TrapFloorHostMoveVerdict.NotYourPawn;
             // P8A (owner, 2026-11-13: a guest's escape left the turn stuck): an escaped player's own computer sets their pawn
             // beside the board, off the floor, as part of the escape; that is the only place it may go once they are out.
+            // OUT-PAWN (owner, 2026-11-26: "the host will remove it or the player can remove their own pawn"): an eliminated
+            // player may also put their own pawn off the floor; before, only the host could, and a stuck game left it there.
             if (f.PawnOwnerOut)
-                return f.PawnOwnerEscaped && !f.Target.HasValue ? TrapFloorHostMoveVerdict.Allowed : TrapFloorHostMoveVerdict.PlayerIsOut;
+                return !f.Target.HasValue ? TrapFloorHostMoveVerdict.Allowed : TrapFloorHostMoveVerdict.PlayerIsOut;
             if (!f.IsPlayerTurn || f.ActivePlayer != f.Sender) return TrapFloorHostMoveVerdict.NotYourTurn;
             // P8A (2026-11-08, live: a stray click after right-click → Move put a pawn on the board's edge and the host
             // took it): stepping off the floor is still a deliberate fall, but only for the player's own pawn, on their

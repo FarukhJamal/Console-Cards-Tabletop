@@ -1083,6 +1083,7 @@ namespace ConsoleCards.Presentation.Composition
             if (setup == null || packet.Snapshot == null) return false;
             bool ok;
             string error = null;
+            TableMarkSet unsentMarks = !hosting && dirty ? host.TableMarks : null; // MARKS-SYNC
             applying = true;
             applySetup = setup;
             try
@@ -1147,6 +1148,7 @@ namespace ConsoleCards.Presentation.Composition
             mismatches = 0;
             if (host.matchState != null) lastRevision = host.matchState.Revision;
             if (ok && !hosting) LinkTableArrived(); // P8A: the host's whole table is here: play may resume
+            if (ok && unsentMarks != null) KeepUnsentMarks(unsentMarks);
             if (ok && !hosting) Debug.Log($"[Phase] The host's table is shown here (floor {setup.FloorIndex + 1})."); // DIAG-1
             if (ok) CheckOwnSeat("the host's table");
             if (introOnArrival)
@@ -1161,6 +1163,37 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             return ok;
+        }
+
+        // MARKS-SYNC (owner, 2026-11-25: "drawings are erased on turn change"): a drawing made here goes to the host a moment
+        // later with this computer's table. A whole table from the host that came first (End Turn sends one) replaced the
+        // drawings and the unsent one was lost. The drawings this computer had that the host's table lacks are put back and
+        // sent again.
+        private void KeepUnsentMarks(TableMarkSet before)
+        {
+            TableMarkSet now = host.TableMarks;
+            TableMarkSet merged = now;
+            for (int i = 0; i < before.Count; i++)
+            {
+                TableMark mark = before[i];
+                bool there = false;
+                for (int j = 0; j < now.Count && !there; j++) there = SameMark(mark, now[j]);
+                if (!there) merged = merged.With(mark);
+            }
+
+            if (ReferenceEquals(merged, now)) return;
+            Debug.Log($"[Online] {merged.Count - now.Count} drawing(s) made here were not on the host's table yet: kept and sent again.");
+            host.ShowTableMarks(merged);
+            MarkDirty();
+        }
+
+        private static bool SameMark(TableMark a, TableMark b)
+        {
+            if (ReferenceEquals(a, b)) return true;
+            if (a.Kind != b.Kind || a.Points.Length != b.Points.Length || a.Text != b.Text) return false;
+            if (a.Points.Length == 0) return Mathf.Abs(a.Yaw - b.Yaw) < 0.01f;
+            return (a.Points[0] - b.Points[0]).sqrMagnitude < 0.0001f
+                && (a.Points[a.Points.Length - 1] - b.Points[b.Points.Length - 1]).sqrMagnitude < 0.0001f;
         }
 
         private bool BuildFromSetup(OnlineTableSetup setup, out string error)

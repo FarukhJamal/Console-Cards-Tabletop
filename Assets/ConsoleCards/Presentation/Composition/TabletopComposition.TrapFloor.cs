@@ -663,6 +663,10 @@ namespace ConsoleCards.Presentation.Composition
         /// <summary>D3: while the next floor is dealt, each seat's Avatar (empty: none chosen); null otherwise.</summary>
         internal ObjectDefinitionId[] trapFloorCarriedAvatars;
 
+        // MARKS-FLOOR (owner, 2026-11-26: "drawing will stay across the floors"): the next floor of the same run keeps the
+        // table's drawings; a new game or a restart starts clean.
+        internal bool keepTableMarksOnNewTable;
+
         /// <summary>P8A: the Avatars the table in play was dealt with (sent to joined computers so they deal the same table).</summary>
         internal ObjectDefinitionId[] trapFloorDealtAvatars;
 

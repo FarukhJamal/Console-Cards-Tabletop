@@ -435,7 +435,7 @@ namespace ConsoleCards.Presentation.Composition
                 host.activeSession = result.Session;
                 host.emptyTableHandEnabled = true;
                 host.templateContext = candidateContext;
-                host.ShowTableMarks(TableMarkSet.Empty); // drawing tool: a new table starts clean
+                host.ShowTableMarks(host.keepTableMarksOnNewTable ? previousMarks : TableMarkSet.Empty); // drawing tool: a new table starts clean (MARKS-FLOOR: a next floor keeps them)
                 host.InitializeActiveSession(false);
                 host.gameTemplatesPanelError = null;
                 host.gameTemplatesPanelVisible = false;
