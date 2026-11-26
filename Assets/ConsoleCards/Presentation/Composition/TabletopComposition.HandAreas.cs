@@ -23,6 +23,16 @@ namespace ConsoleCards.Presentation.Composition
         private const float HandAreaWidthCards = 6.5f;
         private const float HandAreaDepthCards = 2.4f;
 
+        // HAND-3 (owner, 2026-11-26, playtest): the hand area covered the lower Console slots. It now lies to your left of
+        // your Console (the Rulebook lies to the right) and a little further out past the table's edge. Both are tunable here (scene values override).
+        [Tooltip("HAND-3: gap (card widths) between the left edge of your Console and the hand area, which lies to your left of the Console. 0 puts them edge to edge.")]
+        [SerializeField, Min(0f)] private float handBesideConsoleCards = 0.5f;
+
+        [Tooltip("HAND-3: how much further past the table's edge (card widths, added to the usual 0.45) your hand area lies.")]
+        [SerializeField, Min(0f)] private float handAwayFromTableCards = 0.6f;
+
+        private readonly List<Renderer> handSideRenderers = new List<Renderer>(16); // HAND-3: no allocation per frame
+
         private readonly List<TableHandArea> handAreas = new List<TableHandArea>(8);
         private Transform handAreaRoot;
         private Func<ContainerId, ContainerState> handAreaStates;
@@ -131,14 +141,30 @@ namespace ConsoleCards.Presentation.Composition
                 outward.y = 0f;
                 if (outward.sqrMagnitude < 0.0001f) return false;
                 outward.Normalize();
-                float toEdge = DistanceToBoundsEdge(console, outward, table);
-                surface = console + (outward * (toEdge + (HandRowPastEdgeCards * WorldPerCardWidth())));
+                // HAND-3 (owner, 2026-11-26): beside your Console (to your left: the Rulebook is on the right), not in front of its lower slots.
+                float card = WorldPerCardWidth();
+                Vector3 side = Quaternion.LookRotation(-outward, Vector3.up) * Vector3.left;
+                Vector3 beside = console + (side * (HandConsoleHalfAlong(consoleView, side)
+                    + (handBesideConsoleCards * card) + (HandAreaWidthCards * 0.5f * card)));
+                float toEdge = DistanceToBoundsEdge(beside, outward, table);
+                surface = beside + (outward * (toEdge + ((HandRowPastEdgeCards + handAwayFromTableCards) * card)));
                 surface.y = table.max.y + (HandRowLiftCards * WorldPerCardWidth()); // floats clear of the rim, as in TTS
                 seatRotation = Quaternion.LookRotation(-outward, Vector3.up);
                 return true;
             }
 
             return false;
+        }
+
+        // HAND-3: half the Console's width along this direction (as ConsoleHalfWidth, without allocating each frame).
+        private float HandConsoleHalfAlong(ConsoleView view, Vector3 along)
+        {
+            view.GetComponentsInChildren(false, handSideRenderers);
+            if (handSideRenderers.Count == 0) return 0f;
+            Bounds bounds = handSideRenderers[0].bounds;
+            for (int r = 1; r < handSideRenderers.Count; r++) bounds.Encapsulate(handSideRenderers[r].bounds);
+            handSideRenderers.Clear();
+            return (Mathf.Abs(along.x) * bounds.extents.x) + (Mathf.Abs(along.z) * bounds.extents.z);
         }
 
         private static float DistanceToBoundsEdge(Vector3 from, Vector3 direction, Bounds bounds)
@@ -174,6 +200,7 @@ namespace ConsoleCards.Presentation.Composition
             if (!matchState.TryGetContainerPlacement(from, out ContainerPlacementState pile)) return;
             handEdgeArrivalFrom = ContainerViewBinding.PlacementWorldPosition(pile, coordinateConverter);
             handEdgeArrivalAt = Time.unscaledTime;
+            handDrawStartAt = Time.unscaledTime; // HAND-1 (owner, 2026-11-26): cards drawn together reach the row one after another
         }
 
         private TableHandArea HandAreaAt(int index, int layoutSeat)

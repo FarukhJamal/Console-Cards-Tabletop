@@ -29,11 +29,13 @@ namespace ConsoleCards.Presentation.Views.Containers
         // Camera tray (unscaled tray units). Hover/selected cards rise up the screen (forward), lift
         // toward the camera (up) and grow; neighbours of the hovered card spread apart. Every tray card
         // eases toward its target in tray space, so nothing in the tray ever jumps.
-        [SerializeField] private float trayHoverRise = 0.35f;
+        // HAND-2 (owner, 2026-11-26: "hovering the hand pulls cards toward the player"): a gentler hover, as in TTS
+        // (was rise 0.35, lift 0.15, scale 1.15). A scene or prefab value overrides these.
+        [SerializeField] private float trayHoverRise = 0.18f;
         [SerializeField] private float traySelectedRise = 0.5f;
-        [SerializeField] private float trayHoverLift = 0.15f;
+        [SerializeField] private float trayHoverLift = 0.04f;
         [SerializeField] private float traySelectedLift = 0.12f;
-        [SerializeField] private float trayHoverScale = 1.15f;
+        [SerializeField] private float trayHoverScale = 1.06f;
         [SerializeField] private float traySelectedScale = 1.2f;
         [SerializeField] private float trayHoverSpread = 0.35f;
         // BUILD-2 (owner, 2026-10-23: "they are overlapped"): each tray card sits this far toward the camera above the

@@ -500,7 +500,7 @@ namespace ConsoleCards.Presentation.Composition
                 host.presentationTransitions.AnimateCardsFromCurrentResults(
                     starts,
                     result.Succeeded ? host.handReflowDuration : host.returnDuration,
-                    result.Succeeded ? 0.035f : 0f);
+                    result.Succeeded ? 0.08f : 0f); // HAND-1 (owner, 2026-11-26): one card after another (a deal moves many cards)
             }
 
             return dealt;

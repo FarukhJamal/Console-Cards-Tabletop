@@ -49,7 +49,7 @@ namespace ConsoleCards.Presentation.Composition
         private float handEdgeArrivalAt = -10f;
         // Owner, 2026-11-14 ("on the screen 10 cards pop up at once, on the table they go one by one"): a draw into the
         // hand starts both the screen hand's cards and the row's at the same times, one card every HandDrawGapSeconds.
-        internal const float HandDrawGapSeconds = 0.25f;
+        internal const float HandDrawGapSeconds = 0.12f; // HAND-1 (owner, 2026-11-26): as the screen hand's draw (was 0.25)
         private float handDrawStartAt = -10f;
         private ContainerId handEdgeContainerId;
         private Transform handEdgeRoot;

@@ -1509,7 +1509,7 @@ namespace ConsoleCards.Presentation.Composition
             host.presentationTransitions.AnimateCardsFromCurrentResults(
                 starts,
                 result.Succeeded ? host.handReflowDuration : host.returnDuration,
-                result.Succeeded ? 0.035f : 0f);
+                result.Succeeded ? TabletopComposition.HandDrawGapSeconds : 0f); // HAND-1 (owner, 2026-11-26): one card after another
             host.FeedbackLine(
                 result.Succeeded
                     ? $"{FormatPlayerName(active)} drew {need} Controller Card{(need == 1 ? string.Empty : "s")}."
