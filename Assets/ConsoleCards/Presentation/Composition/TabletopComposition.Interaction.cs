@@ -304,6 +304,8 @@ namespace ConsoleCards.Presentation.Composition
             moveCoordinator.ComfortCapRejected = ContextMenus.ShowHandCapReached;
             containedCardDragCoordinator.IsContainerAtComfortCap = ContextMenus.IsOwnHandAtComfortCap;
             containedCardDragCoordinator.ComfortCapRejected = ContextMenus.ShowHandCapReached;
+            containedCardDragCoordinator.HandRowSlotPose = HandRowSlotPoseOf; // HAND-5: a card leaves the tray from its place in the hand row
+            containedCardDragCoordinator.HandRowCardSize = HandEdgeSize;
             inputRoutingPolicy.ConfigureInteractionRouter(interactionRouter);
             cameraInputAdapter.ConfigureScrollRoutingPolicy(inputRoutingPolicy);
             cameraRoutingConfiguredByComposition = true;

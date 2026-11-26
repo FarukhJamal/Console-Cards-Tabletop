@@ -100,6 +100,7 @@ namespace ConsoleCards.Presentation.Composition
         private bool TryGetHandAreaPose(ContainerId hand, bool mine, out Vector3 centre, out Quaternion rotation)
         {
             if (mine && TryGetHandEdgePose(out centre, out rotation)) return true; // your area is your hand row, past the edge
+            if (!mine && TryGetOtherHandRowPose(hand, out centre, out rotation)) return true; // HAND-5: and theirs is theirs, past their edge
             if (matchState.TryGetContainerPlacement(hand, out ContainerPlacementState zone))
             {
                 centre = ContainerViewBinding.PlacementWorldPosition(zone, coordinateConverter);
@@ -120,13 +121,19 @@ namespace ConsoleCards.Presentation.Composition
         // of its Console, turned to the seat. False without a Console or a table to measure.
         private bool TryGetLocalHandRowPose(out Vector3 surface, out Quaternion seatRotation)
         {
+            return TryGetSeatHandRowPose(localPlayerLayoutSeatIndex, out surface, out seatRotation);
+        }
+
+        // HAND-5 (owner, 2026-11-26): the same row for any seat (beside its own Console, on that seat's left, past its own edge of the table).
+        private bool TryGetSeatHandRowPose(int layoutSeatIndex, out Vector3 surface, out Quaternion seatRotation)
+        {
             surface = default;
             seatRotation = Quaternion.identity;
             if (privateViewActive || !TryGetTableWorldBounds(out Bounds table)) return false;
             IReadOnlyList<CartridgeSeat> seats = TableSeats;
             for (int i = 0; i < seats.Count; i++)
             {
-                if (seats[i].LayoutSeatIndex != localPlayerLayoutSeatIndex) continue;
+                if (seats[i].LayoutSeatIndex != layoutSeatIndex) continue;
                 if (!matchState.Seats.TryGetValue(seats[i].SeatId, out SeatState seat)
                     || seat.Console == null
                     || seat.Console.SlotContainerIds.Count == 0
@@ -154,6 +161,39 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             return false;
+        }
+
+        // HAND-5 (owner, 2026-11-26: "other players' hands still lie on the table"): where another seat's hand cards stand, found from
+        // its hand container. Not with the hands on the table (then every hand lies on its own table zone). The seat's Hand zone is
+        // only a place in the match state: the view puts the cards (and the drop box) here, past the seat's own edge.
+        private bool TryGetOtherHandRowPose(ContainerId hand, out Vector3 surface, out Quaternion seatRotation)
+        {
+            surface = default;
+            seatRotation = Quaternion.identity;
+            if (handsOnTable || hand.IsEmpty) return false;
+            IReadOnlyList<CartridgeSeat> seats = TableSeats;
+            for (int i = 0; i < seats.Count; i++)
+            {
+                if (seats[i].HandContainerId != hand || seats[i].LayoutSeatIndex == localPlayerLayoutSeatIndex) continue;
+                return TryGetSeatHandRowPose(seats[i].LayoutSeatIndex, out surface, out seatRotation);
+            }
+
+            return false;
+        }
+
+        // HAND-5: each frame, the other seats' hands stand at their row; a hand is laid out again only when its row moved.
+        private void UpdateOtherHandRows()
+        {
+            if (!IsInitialized || matchState == null || coordinateConverter == null) return;
+            for (int i = 0; i < Registry.hiddenHandViews.Count; i++)
+            {
+                HiddenHandView hidden = Registry.hiddenHandViews[i];
+                if (hidden == null || !hidden.IsBound) continue;
+                bool changed = TryGetOtherHandRowPose(hidden.ContainerId, out Vector3 surface, out Quaternion rotation)
+                    ? hidden.SetRowPose(surface, rotation)
+                    : hidden.ClearRowPose();
+                if (changed) hidden.ApplyAcceptedLayout();
+            }
         }
 
         // HAND-3: half the Console's width along this direction (as ConsoleHalfWidth, without allocating each frame).

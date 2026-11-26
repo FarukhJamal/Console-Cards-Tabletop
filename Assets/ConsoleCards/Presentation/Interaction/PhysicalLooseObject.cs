@@ -1342,6 +1342,14 @@ namespace ConsoleCards.Presentation.Interaction
             if (hasReleasePose) { position = releasePosition; rotation = releaseRotation; }
             else if (hasSettledPose) { position = settledPosition; rotation = settledRotation; }
             else if (hasHeldPose) { position = heldPosition; rotation = heldRotation; }
+            else if (view is CardView)
+            {
+                // HAND-5 (owner, 2026-11-26: "those which have fallen don't ever come back"): a card laid down past the table's edge
+                // (from the hand) never had a release, settled or held pose, so it was not recovered and fell for ever. It comes back from where it fell.
+                PhysicalObjectState known = view.BoundState != null ? view.BoundState.PhysicalState : null;
+                position = fallPosition;
+                rotation = known != null ? Rotation(known.Rotation) : body.rotation;
+            }
             else
             {
                 if (!missingRecoveryPoseReported) ReportMissingRecoveryPose();
@@ -1364,7 +1372,8 @@ namespace ConsoleCards.Presentation.Interaction
             // fell by itself while the table was set up, so it goes back where it was dealt, not beside the table.
             bool fellByItself = !hasReleasePose && !hasHeldPose && hasSettledPose;
             FreezeAt(position, rotation);
-            if (!fellByItself) position = PlaceOutsideTable(position, fallPosition);
+            if (view is CardView) position = PullOntoTable(position, rotation); // HAND-5: a card comes back onto the table, not out of sight beside it
+            else if (!fellByItself) position = PlaceOutsideTable(position, fallPosition);
             else position = RestOnTable(position, rotation);
             bool accepted = CommitFrozenPose(position, rotation,
                 userActionActive
@@ -1383,6 +1392,23 @@ namespace ConsoleCards.Presentation.Interaction
                 frozenAfterRecovery = false;
                 applied = null;
             }
+        }
+
+        // HAND-5 (owner, 2026-11-26): puts a recovered card back ON the table: its footprint just inside the nearest edge (or where it
+        // already was, if that is on the table), its lowest point on the table top. Event-time only, like the rest of the recovery.
+        private Vector3 PullOntoTable(Vector3 position, Quaternion rotation)
+        {
+            Collider pieceCollider = PhysicalCollider;
+            if (pieceCollider == null || float.IsNaN(recoveryHeight) || !TryGetRecoveryTableBounds(out Bounds table)) return position;
+            Physics.SyncTransforms(); // auto-sync is off; bounds must reflect the frozen pose
+            Bounds piece = pieceCollider.bounds;
+            float x = Mathf.Clamp(piece.center.x, table.min.x + piece.extents.x, table.max.x - piece.extents.x);
+            float z = Mathf.Clamp(piece.center.z, table.min.z + piece.extents.z, table.max.z - piece.extents.z);
+            float top = recoveryHeight + Tune.RecoverBelowSurfaceDistance;
+            Vector3 adjusted = position + new Vector3(x - piece.center.x, (top + 0.002f) - piece.min.y, z - piece.center.z);
+            FreezeAt(adjusted, rotation);
+            Physics.SyncTransforms();
+            return adjusted;
         }
 
         // SETUP-2: lifts a frozen piece so its collider's bottom lies on the table top (a die dealt at the table's height

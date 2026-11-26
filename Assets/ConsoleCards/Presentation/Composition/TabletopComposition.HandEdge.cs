@@ -70,6 +70,7 @@ namespace ConsoleCards.Presentation.Composition
         private readonly List<ContainerId> handCarryPiles = new List<ContainerId>(8);
         private bool handCarryDropPending;
         private ContainerId handCarryDropTarget;
+        private bool handCarryBackToHand; // HAND-5 (owner, 2026-11-26): let go over your hand area: the cards stay in the hand
 
         // POL-7: selected hand cards that come along when a selected piece on the table is dragged.
         private readonly List<CardView> groupHandCards = new List<CardView>(16);
@@ -288,6 +289,19 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
+        // HAND-5 (owner, 2026-11-26): where this hand card stands in the row at the table's edge now (its slot, as RebuildHandEdge and
+        // UpdateHandEdge place it); null while the row is not shown. No allocation.
+        private Pose? HandRowSlotPoseOf(CardView card)
+        {
+            for (int i = 0; i < handEdgeCards.Count && i < handEdgeProxies.Count; i++)
+            {
+                if (ReferenceEquals(handEdgeCards[i], card) && handEdgeProxies[i] != null)
+                    return new Pose(handEdgeProxies[i].position, handEdgeProxies[i].rotation);
+            }
+
+            return null;
+        }
+
         // The scale a card has on the table (not the tray's): any card that is not in this screen's hand.
         private Vector3 TableCardScale()
         {
@@ -433,10 +447,13 @@ namespace ConsoleCards.Presentation.Composition
 
         // Let go: the cards go into the pile under the pointer, or onto the table (on the next frame, once the
         // gesture has fully ended).
-        private void ReleaseHandCarry()
+        private void ReleaseHandCarry(Vector2 screenPosition)
         {
             if (!handCarryActive) return;
-            handCarryDropTarget = FindHandDropPile(handCarryPoint);
+            // HAND-5 (owner, 2026-11-26): the hand area lies past the table's edge, where the pointer meets no table, so the point
+            // on the table plane is not where it was let go. The area's own box under the pointer decides: the cards go back to the hand.
+            handCarryBackToHand = IsScreenPointOverOwnHandArea(screenPosition);
+            handCarryDropTarget = handCarryBackToHand ? ContainerId.Empty : FindHandDropPile(handCarryPoint);
             handCarryDropPending = true;
             handCarryActive = false;
         }
@@ -475,14 +492,15 @@ namespace ConsoleCards.Presentation.Composition
             {
                 PhysicalLooseObject follower = handCarryFollowers[i];
                 if (follower == null || follower.View == null || !follower.View.IsBound || !follower.IsHeld) continue;
+                if (handCarryBackToHand) { follower.Cancel(); continue; } // HAND-5: back to the hand: the other selected pieces go back where they were
                 if (!follower.Release()) follower.Cancel();
             }
 
             SessionService.BeginUndoBatch();
             try
             {
-                PlaceHandCards(handCarryCards, handCarryPoint, handCarryDropTarget);
-                if (moved.sqrMagnitude > 0.0001f)
+                if (!handCarryBackToHand) PlaceHandCards(handCarryCards, handCarryPoint, handCarryDropTarget); // HAND-5: back to the hand: nothing to move
+                if (!handCarryBackToHand && moved.sqrMagnitude > 0.0001f)
                 {
                     for (int i = 0; i < handCarryPiles.Count; i++) MovePileBy(handCarryPiles[i], moved);
                 }
@@ -492,6 +510,7 @@ namespace ConsoleCards.Presentation.Composition
                 SessionService.EndUndoBatch();
             }
 
+            handCarryBackToHand = false; // HAND-5
             ClearHandCarryLists();
             handEdgePressCard = null;
             PruneToolSelection();
@@ -529,6 +548,22 @@ namespace ConsoleCards.Presentation.Composition
             if (placed == 0) return;
             if (intoPile) ScheduleLandingFeedback(pileId, true);
             PlayCardSound(true);
+        }
+
+        // HAND-5 (owner, 2026-11-26): true when the pointer's ray passes through this screen's own hand area (the box drawn blue),
+        // wherever it lies, on the table or past its edge. The same test as the box's highlight; no physics, no allocation.
+        private bool IsScreenPointOverOwnHandArea(Vector2 screenPosition)
+        {
+            UnityCamera viewer = hitResolver != null ? hitResolver.TargetCamera : null;
+            if (viewer == null || handView == null || !handView.IsBound) return false;
+            Ray ray = viewer.ScreenPointToRay(screenPosition);
+            ContainerId hand = handView.ContainerId;
+            for (int i = 0; i < handAreas.Count; i++)
+            {
+                if (handAreas[i] != null && handAreas[i].ContainerId == hand && handAreas[i].Contains(ray)) return true;
+            }
+
+            return false;
         }
 
         // Cards laid in a row on the table, centred on a point, along the seat's edge.

@@ -27,6 +27,14 @@ namespace ConsoleCards.Presentation.Interaction
         private readonly HandView handView;
         private readonly Func<CardView, int, ReorderContainerResult> reorderHandCard;
 
+        /// <summary>
+        /// HAND-5 (owner, 2026-11-26): where a hand card stands in the hand row at the table's edge (null when there is no row), and the
+        /// size that row's cards have relative to the table's. A card dragged out of the camera tray leaves from that place.
+        /// </summary>
+        public Func<CardView, Pose?> HandRowSlotPose { get; set; }
+
+        public float HandRowCardSize { get; set; } = 1f;
+
         private CardView activeCardView;
         private ContainerId sourceContainerId;
         private IContainerLayoutView sourceLayoutView;
@@ -318,7 +326,7 @@ namespace ConsoleCards.Presentation.Interaction
                     if (handView.TrayRig != null) handView.TrayRig.CarriedOut = true;
                 }
 
-                handView.SetTrayHandoffTarget(view, tablePosition, tableRotation);
+                handView.SetTrayHandoffTarget(view, tablePosition, tableRotation, HandRowSlotPose?.Invoke(view), HandRowCardSize); // HAND-5
                 if (!handView.IsTrayHandoffComplete(view))
                 {
                     UpdateFeedback(screenPosition);

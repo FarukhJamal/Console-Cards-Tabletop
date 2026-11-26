@@ -433,7 +433,7 @@ namespace ConsoleCards.Presentation.Composition
             if (handCarryActive)
             {
                 UpdateHandCarry(screenPosition);
-                ReleaseHandCarry();
+                ReleaseHandCarry(screenPosition); // HAND-5
                 handEdgePressActive = false;
                 CancelSelectPress();
                 return;

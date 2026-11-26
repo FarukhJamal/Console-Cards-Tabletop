@@ -300,7 +300,8 @@ namespace ConsoleCards.Presentation.Views.Containers
         /// The pointer left the tray: the card flies and grows toward its table pose (which follows the
         /// pointer) over trayHandoffDuration. The caller then hands it to physics already in place.
         /// </summary>
-        internal void SetTrayHandoffTarget(CardView card, Vector3 worldPosition, Quaternion worldRotation)
+        internal void SetTrayHandoffTarget(CardView card, Vector3 worldPosition, Quaternion worldRotation,
+            Pose? rowSlot = null, float rowSize = 1f)
         {
             if (!isBound || trayRig == null || card == null)
             {
@@ -315,6 +316,16 @@ namespace ConsoleCards.Presentation.Views.Containers
                 trayHandoffStart = trayMotions.TryGetValue(card.ObjectId, out TrayMotion motion)
                     ? motion
                     : CaptureTrayMotion(card);
+                if (rowSlot.HasValue)
+                {
+                    // HAND-5 (owner, 2026-11-26: "drawing out of the hand should every time come from the hand row closer to the table"):
+                    // the card leaves from its place in the hand row at the table's edge, at that row's size, not from the camera tray.
+                    Transform anchor = trayRig.Anchor;
+                    trayHandoffStart.Position = anchor.InverseTransformPoint(rowSlot.Value.position);
+                    trayHandoffStart.Rotation = Quaternion.Inverse(anchor.rotation) * rowSlot.Value.rotation;
+                    trayHandoffStart.Scale = rowSize / Mathf.Max(0.0001f, trayRig.Scale);
+                    trayArrivals.Remove(card.ObjectId);
+                }
             }
 
             trayHandoffWorldPosition = worldPosition;

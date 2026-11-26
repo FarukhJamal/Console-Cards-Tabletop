@@ -35,8 +35,31 @@ namespace ConsoleCards.Presentation.Views.Containers
         private TabletopCoordinateConverter converter;
         private TextMesh countLabel;
         private bool isBound;
+        // HAND-5 (owner, 2026-11-26): where the row stands when the composition puts it past the seat's own edge of the table,
+        // instead of on the hand zone's place in the match state.
+        private bool hasRowPose;
+        private Vector3 rowSurface;
+        private Quaternion rowRotation;
 
         public bool IsBound => isBound;
+
+        /// <summary>HAND-5: true when this moved the row (the caller then lays the hand out again).</summary>
+        public bool SetRowPose(Vector3 surface, Quaternion rotation)
+        {
+            if (hasRowPose && (rowSurface - surface).sqrMagnitude < 0.000001f && Quaternion.Angle(rowRotation, rotation) < 0.01f) return false;
+            hasRowPose = true;
+            rowSurface = surface;
+            rowRotation = rotation;
+            return true;
+        }
+
+        /// <summary>HAND-5: back to the hand zone's own place; true when that moved the row.</summary>
+        public bool ClearRowPose()
+        {
+            if (!hasRowPose) return false;
+            hasRowPose = false;
+            return true;
+        }
 
         public ContainerId ContainerId => isBound ? containerState.Id : ContainerId.Empty;
 
@@ -93,7 +116,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             RestoreAppliedFaces(true);
             Dictionary<TabletopObjectId, CardView> lookup = ContainerViewBinding.BuildLookup(suppliedCardViews);
             List<CardView> orderedCards = ContainerViewBinding.ResolveOrderedCards(containerState, lookup);
-            Vector3 surface = ContainerViewBinding.PlacementWorldPosition(placementState, converter);
+            Vector3 surface = hasRowPose ? rowSurface : ContainerViewBinding.PlacementWorldPosition(placementState, converter);
             if (standingRow)
             {
                 ApplyStandingRow(orderedCards, surface);
@@ -137,7 +160,7 @@ namespace ConsoleCards.Presentation.Views.Containers
         // their backs face the middle of the table, each a hair in front of the one before so they never flicker.
         private void ApplyStandingRow(List<CardView> orderedCards, Vector3 surface)
         {
-            Quaternion seatRotation = converter.ToWorldRotation(placementState.Pose);
+            Quaternion seatRotation = hasRowPose ? rowRotation : converter.ToWorldRotation(placementState.Pose); // HAND-5
             transform.SetPositionAndRotation(surface, seatRotation);
             ContainerViewBinding.ApplyPlan(NoPlan, layoutAppliedCards, containerState.Id); // cards that left let go
 
@@ -211,6 +234,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             containerState = null;
             placementState = null;
             converter = null;
+            hasRowPose = false; // HAND-5
             countLabel = null;
             suppliedCardViews.Clear();
             VisibleCardCount = 0;

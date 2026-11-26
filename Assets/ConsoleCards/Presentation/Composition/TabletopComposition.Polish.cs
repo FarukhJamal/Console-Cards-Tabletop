@@ -123,6 +123,7 @@ namespace ConsoleCards.Presentation.Composition
             UpdateStackCarryMotion(); // POL-4
             UpdateGroupCarry();
             UpdateHandEdge(); // owner, 2026-11-03: your hand also stands at your edge of the table
+            UpdateOtherHandRows(); // HAND-5: the other seats' hands stand past their own edge
             UpdateHandAreas(); // P-1: the hand areas on the table take dropped cards
             UpdateCarryHeightAndGhost();
             UpdateHover();
