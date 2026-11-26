@@ -99,7 +99,10 @@ namespace ConsoleCards.Presentation.Composition
             {
                 Debug.Log($"[Authority] End Turn from {member.Name}: refused ({verdict}).");
                 if (verdict == TrapFloorEndTurnVerdict.Duplicate) return; // it already ran; its table was sent
-                SendNotice(member, EndTurnRefusalText(verdict));
+                string refusal = EndTurnRefusalText(verdict);
+                if (verdict == TrapFloorEndTurnVerdict.NotTurnOwner && host.trapFloorTurnState != null) // TURN-CUE: name whose turn it is
+                    refusal = TurnNowText(refusal, host.trapFloorTurnState);
+                SendNotice(member, refusal);
                 SendTable(member);
                 return;
             }
@@ -186,6 +189,14 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             Debug.Log("[Authority] The host moved another player's pawn (a host correction): announced on every computer.");
+        }
+
+        // TURN-CUE (owner, 2026-11-25: after Done Buying the guest's moves were refused "not your turn" with no clear cue): the
+        // refusal says whose turn it is, or that the Buy Phase is still on.
+        private string TurnNowText(string refusal, TrapFloorTurnState turn)
+        {
+            if (turn.IsBuyPhase) return refusal + " The Buy Phase is still on: everyone must press Done Buying first.";
+            return turn.ActivePlayerId.IsEmpty ? refusal : $"{refusal} It is {host.FormatPlayerName(turn.ActivePlayerId)}'s turn.";
         }
 
         private static string EndTurnRefusalText(TrapFloorEndTurnVerdict verdict)

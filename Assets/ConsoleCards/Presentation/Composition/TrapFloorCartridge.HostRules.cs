@@ -523,6 +523,10 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             hostRefusal = $"The host refused that move: {TrapFloorHostMoveRules.Describe(verdict, allowance)}";
+            if (verdict == TrapFloorHostMoveVerdict.NotYourTurn && host.trapFloorTurnState != null) // TURN-CUE: whose turn it is
+                hostRefusal += host.trapFloorTurnState.IsBuyPhase
+                    ? " The Buy Phase is still on: everyone must press Done Buying first."
+                    : $" It is {FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)}'s turn.";
             Debug.Log($"[Authority] Pawn move refused (Full, {verdict}).");
             return false;
         }

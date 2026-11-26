@@ -202,9 +202,10 @@ namespace ConsoleCards.Presentation.Composition
             if (!turn.IsBuyPhase)
             {
                 PlayerId next = turn.ActivePlayerId;
-                host.FeedbackLine(
-                    $"Everyone has bought. {FormatPlayerName(next).ToUpperInvariant()}'S TURN{PlayerEffectChips(next)}: move or use an Ability.",
-                    FeedbackSeverity.Info);
+                UnityEngine.Debug.Log($"[Phase] Buy Phase over: round {turn.CurrentRound}, {FormatPlayerName(next)}'s turn."); // DIAG-1
+                // TURN-CUE: a notice on every computer (an Info line can be hidden by the Feel settings), so nobody misses
+                // that the turns began and whose turn it is.
+                host.ShowNotice($"Everyone has bought. {FormatPlayerName(next).ToUpperInvariant()}'S TURN{PlayerEffectChips(next)}: move or use an Ability.");
                 return;
             }
 

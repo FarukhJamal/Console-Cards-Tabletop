@@ -1140,10 +1140,14 @@ namespace ConsoleCards.Presentation.Composition
             awaitingHostDice.Clear(); // AUTH-DICE: the table now holds the host's results
             dirty = false;
             matchReplaced = false;
-            awaitingTable = false;
+            // RESYNC-1 (owner, 2026-11-25: "next floor did not start on the client"): a table that could not be shown is asked
+            // for again after the usual wait; before, the wait was dropped and the guest stayed on the old floor for good.
+            awaitingTable = !ok && !hosting;
+            if (awaitingTable) lastTableRequest = Time.unscaledTime;
             mismatches = 0;
             if (host.matchState != null) lastRevision = host.matchState.Revision;
             if (ok && !hosting) LinkTableArrived(); // P8A: the host's whole table is here: play may resume
+            if (ok && !hosting) Debug.Log($"[Phase] The host's table is shown here (floor {setup.FloorIndex + 1})."); // DIAG-1
             if (ok) CheckOwnSeat("the host's table");
             if (introOnArrival)
             {
@@ -1307,10 +1311,22 @@ namespace ConsoleCards.Presentation.Composition
             reader.ReadBytes(9);
             Guid match = ReadGuid(reader);
             ulong hash = reader.ReadUInt64();
-            if (awaitingTable || dirty || applying || Replicated.UnconfirmedCount > 0
-                || host.matchState == null || host.matchState.Id.Value != match)
+            if (awaitingTable || dirty || applying || Replicated.UnconfirmedCount > 0 || waitingForContent != null || !sharedTable)
             {
                 mismatches = 0;
+                return;
+            }
+
+            // RESYNC-1: a check for another match means the host is on a table (a next floor, a new deal) this computer
+            // never got or could not show. It was ignored before, so the guest stayed on the old floor; now it asks again.
+            if (host.matchState == null || host.matchState.Id.Value != match)
+            {
+                if (++mismatches >= 2)
+                {
+                    mismatches = 0;
+                    RequestTable("this computer is on another floor or table than the host");
+                }
+
                 return;
             }
 
