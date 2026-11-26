@@ -699,5 +699,203 @@ namespace ConsoleCards.Presentation.Composition
             Debug.Log("[Authority] Pawn placement refused: its resting place and its table pose name different tiles (PHY-3).");
             return false;
         }
+
+        // ---------- HOST-FORCE (owner, 2026-11-26): No soft-locks: timeouts, host force/skip, checkpoints ----------
+        // The host (offline: anyone) can get a stuck table moving: skip the turn of a seat that plays elsewhere (a guest who
+        // left or hangs), finish buying for a seat that has not pressed Done Buying, and force the floor turn (throw the
+        // floor dice, collapse the marked tile, or end it for an operator who plays elsewhere). Each entry asks nothing,
+        // logs one "[Phase] Host forced: ..." line (names of seats only, nothing hidden), shows a notice on every computer,
+        // and runs through the same code the player's own button uses. A joined computer never sees these entries and has
+        // no message to ask for them; OnlinePlayPresenter.RunHostForced is false unless this computer hosts.
+
+        // Offline, or the host of a normal shared room (a private development session keeps its own pipeline).
+        private bool HostMayForce => !host.IsOnlineTable || (host.HasOnline && host.Online.IsHosting && !host.Online.IsPrivateHost);
+
+        internal List<PopupActionOption> BuildTrapFloorTurnActions()
+        {
+            List<PopupActionOption> actions = BuildTrapFloorTurnActionsCore();
+            AddHostForceActions(actions);
+            return actions;
+        }
+
+        // Menu build time only (not per frame).
+        private void AddHostForceActions(List<PopupActionOption> actions)
+        {
+            TrapFloorTurnState turn = host.trapFloorTurnState;
+            if (turn == null || host.matchState == null || !HostMayForce || turn.IsCurrentFloorFailed
+                || (host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.IsWon))
+            {
+                return;
+            }
+
+            if (turn.Phase == TrapFloorTurnPhase.PlayerTurn)
+            {
+                PlayerId seat = turn.ActivePlayerId;
+                if (!seat.IsEmpty && !host.IsPlayerOnThisComputer(seat)) // a seat that plays here ends its own turn with End Turn
+                    actions.Add(new PopupActionOption($"Skip {FormatPlayerName(seat)}'s turn", true, () => HostForceSkipTurn(seat)));
+            }
+            else if (turn.IsBuyPhase)
+            {
+                PlayerId buyerHere = BuyerId; // this one has the plain Done Buying entry
+                for (int i = 0; i < turn.PlayerOrder.Count; i++)
+                {
+                    PlayerId seat = turn.PlayerOrder[i];
+                    if (seat == buyerHere || !turn.IsBuyingPlayer(seat)) continue;
+                    actions.Add(new PopupActionOption($"Finish buying for {FormatPlayerName(seat)}", true, () => HostForceFinishBuying(seat)));
+                }
+            }
+            else if (turn.Phase == TrapFloorTurnPhase.FloorTurn)
+            {
+                PlayerId operatorSeat = turn.FloorOperatorPlayerId;
+                bool markedTile = !collapsePreviewId.IsEmpty && host.physicalFloorCollapsePending;
+                bool diceOwed = !markedTile && FloorTurnCollapseOwed(anyLevel: true);
+                if (markedTile) actions.Add(new PopupActionOption("Force the floor turn (collapse the marked tile)", true, HostForceFloorTurn));
+                else if (diceOwed) actions.Add(new PopupActionOption("Force the floor turn (throw the floor dice)", true, HostForceFloorTurn));
+                else if (!operatorSeat.IsEmpty && !host.IsPlayerOnThisComputer(operatorSeat))
+                    actions.Add(new PopupActionOption($"Force the floor turn (end it for {FormatPlayerName(operatorSeat)})", true, HostForceFloorTurn));
+            }
+        }
+
+        // Runs one forced step as the seat (the host acts for it as for a joined computer's End Turn), then tells everyone.
+        // The notice and the log line say what the host did; a step the game refused says why instead.
+        private void HostForceRun(PlayerId seat, string logLine, string notice, Action step)
+        {
+            TrapFloorTurnState before = host.trapFloorTurnState;
+            string key = HostForceTurnKey(before);
+            Debug.Log($"[Phase] Host forced: {logLine}.");
+            lastFloorTurnRefusal = null;
+            if (host.IsOnlineTable)
+            {
+                if (!host.Online.RunHostForced(seat, step)) { host.ShowMessage("Only the host can do that."); return; }
+            }
+            else
+            {
+                step();
+            }
+
+            if (HostForceTurnKey(host.trapFloorTurnState) == key)
+            {
+                host.ShowMessage(lastFloorTurnRefusal ?? "The host could not force that yet: a step is still waiting (see the table).");
+                return;
+            }
+
+            AnnounceHostForced(notice);
+        }
+
+        private static string HostForceTurnKey(TrapFloorTurnState turn) => turn == null
+            ? string.Empty
+            : $"{turn.CurrentRound}|{turn.Phase}|{turn.ActivePlayerId.Value}|{turn.FloorOperatorPlayerId.Value}|{turn.IsCurrentFloorFailed}|{turn.IsBuyPhase}";
+
+        private void AnnounceHostForced(string notice)
+        {
+            if (host.IsOnlineTable) host.Online.AnnounceHostForced(notice);
+            else host.ShowNotice(notice);
+        }
+
+        // (a) End the turn of the seat whose turn it is, as if it pressed End Turn (a waiting Trap is applied or stopped by
+        // the same rules; an unfinished payment is dropped), through AdvanceTrapFloorTurn.
+        private void HostForceSkipTurn(PlayerId seat)
+        {
+            host.ContextMenus.CloseContextMenu();
+            TrapFloorTurnState turn = host.trapFloorTurnState;
+            if (!HostMayForce) { host.ShowMessage("Only the host can skip a turn."); return; }
+            if (turn == null || turn.IsCurrentFloorFailed || turn.Phase != TrapFloorTurnPhase.PlayerTurn || turn.ActivePlayerId != seat) return; // the turn moved on
+            string name = FormatPlayerName(seat);
+            HostForceRun(seat, $"skipped the turn of {name} (round {turn.CurrentRound})", $"The host skipped {name}'s turn.", () => AdvanceTrapFloorTurn(false));
+        }
+
+        // (b) Mark a seat that has not pressed Done Buying as done: the same command its own Done Buying sends. What is left of
+        // its draw goes back into the Ability deck when the next turn ends (END-TURN-RETURN finds a draw lying out).
+        private void HostForceFinishBuying(PlayerId seat)
+        {
+            host.ContextMenus.CloseContextMenu();
+            TrapFloorTurnState turn = host.trapFloorTurnState;
+            if (!HostMayForce) { host.ShowMessage("Only the host can finish buying for a player."); return; }
+            if (turn == null || !turn.IsBuyingPlayer(seat)) return; // it finished meanwhile
+            if (AvatarChoicePending())
+            {
+                host.ShowMessage("Avatars are still being chosen: the Buy Phase starts once every player has chosen (or pressed Later).");
+                return;
+            }
+
+            string name = FormatPlayerName(seat);
+            TrapFloorTurnAdvanceResult result = default;
+            Action step = () =>
+            {
+                host.SessionService.BeginUndoBatch();
+                try
+                {
+                    result = host.TableAuthority.Submit<TrapFloorFinishBuyingCommand, TrapFloorTurnAdvanceResult>(
+                        new TrapFloorFinishBuyingCommand(host.CreateCommandContext(seat)));
+                }
+                finally
+                {
+                    host.SessionService.EndUndoBatch();
+                }
+            };
+            Debug.Log($"[Phase] Host forced: finished buying for {name} (round {turn.CurrentRound}).");
+            if (host.IsOnlineTable)
+            {
+                if (!host.Online.RunHostForced(seat, step)) { host.ShowMessage("Only the host can do that."); return; }
+            }
+            else
+            {
+                step();
+            }
+
+            if (!result.Succeeded)
+            {
+                host.ShowMessage($"Finish buying for {name} was refused: {result.Error}.");
+                RefreshTrapFloorStatusUi();
+                return;
+            }
+
+            AnnounceHostForced($"The host finished buying for {name}.");
+            ShowBuyPhaseProgress(seat);
+            RefreshTrapFloorStatusUi();
+        }
+
+        // (c) The floor turn waits on the floor dice, on a marked tile's Collapse, or on an operator who plays elsewhere.
+        // One press does the next thing that is missing: confirm the marked tile, else throw both floor dice (the game
+        // watches them and marks the tile; press again to collapse it), else end the floor turn for its operator.
+        private void HostForceFloorTurn()
+        {
+            host.ContextMenus.CloseContextMenu();
+            TrapFloorTurnState turn = host.trapFloorTurnState;
+            if (!HostMayForce) { host.ShowMessage("Only the host can force the floor turn."); return; }
+            if (turn == null || turn.IsCurrentFloorFailed || turn.Phase != TrapFloorTurnPhase.FloorTurn) return; // it moved on
+            if (!collapsePreviewId.IsEmpty && host.physicalFloorCollapsePending)
+            {
+                Debug.Log($"[Phase] Host forced: collapsed the marked tile (round {turn.CurrentRound}).");
+                ConfirmFloorCollapse(); // the Collapse button's own handler
+                AnnounceHostForced("The host collapsed the marked tile.");
+                if (FloorTurnCollapseOwed(anyLevel: true)) return; // a die beyond the floor or on a hole: the dice are owed again
+                turn = host.trapFloorTurnState;
+                if (turn == null || turn.IsCurrentFloorFailed || turn.Phase != TrapFloorTurnPhase.FloorTurn) return;
+            }
+            else if (FloorTurnCollapseOwed(anyLevel: true))
+            {
+                if (!collapseWatching && !host.physicalFloorCollapsePending)
+                {
+                    host.ShowMessage("The floor is not waiting for its dice yet: try again in a moment.");
+                    return;
+                }
+
+                if (!TryGetOfficialFloorfallDieViews(out DieView xDie, out _) || xDie.PhysicalObject == null || !xDie.PhysicalObject.Roll())
+                {
+                    host.ShowMessage("The floor dice cannot be thrown right now: wait for them to come to rest.");
+                    return;
+                }
+
+                host.RollFloorDiePartner(xDie.ObjectId); // the other floor die goes with it (COLLAPSE-ROLL)
+                Debug.Log($"[Phase] Host forced: threw the floor dice (round {turn.CurrentRound}).");
+                AnnounceHostForced("The host threw the floor dice.");
+                return;
+            }
+
+            PlayerId operatorSeat = turn.FloorOperatorPlayerId;
+            if (operatorSeat.IsEmpty) return;
+            HostForceRun(operatorSeat, $"ended the floor turn (round {turn.CurrentRound})", "The host ended the floor turn.", () => AdvanceTrapFloorTurn(false));
+        }
     }
 }

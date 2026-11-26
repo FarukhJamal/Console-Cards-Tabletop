@@ -204,7 +204,7 @@ namespace ConsoleCards.Presentation.Composition
                 Rules = isEmpty ? "No rules: free play with the platform's components." : GameRulesText(entry),
                 Deck = DeckLineText(entry, out bool canChangeDeck),
                 CanChangeDeck = canChangeDeck,
-                ProfileName = host.EnsureProfile().Active.displayName,
+                ProfileName = PlayerNameLimit.Apply(host.EnsureProfile().Active.displayName), // NAME-LIMIT (owner, 2026-11-26)
                 CanOpenCardArt = host.UsesTableArt(entry.Game),
                 CanEditCards = !isEmpty,
                 CanEditDecks = !isEmpty,
@@ -239,7 +239,7 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = 0; i < saved.Count; i++)
             {
                 bool isActive = string.Equals(saved[i].id, service.Active.id, StringComparison.OrdinalIgnoreCase);
-                ProfileRowModel row = new ProfileRowModel(saved[i].id, saved[i].displayName, string.Empty, isActive);
+                ProfileRowModel row = new ProfileRowModel(saved[i].id, PlayerNameLimit.Apply(saved[i].displayName), string.Empty, isActive);
                 if (isActive) profiles.Insert(0, row);
                 else profiles.Add(row);
             }
@@ -265,7 +265,7 @@ namespace ConsoleCards.Presentation.Composition
             int[] order = FrontEndColours();
             for (int i = 0; i < count; i++)
             {
-                names[i] = i == 0 ? service.Active.displayName : $"Player {i + 1}";
+                names[i] = i == 0 ? PlayerNameLimit.Apply(service.Active.displayName) : $"Player {i + 1}"; // NAME-LIMIT (owner, 2026-11-26)
                 colors[i] = ColourByIndex(i < order.Length ? order[i] : i);
                 colorNames[i] = ColourNameByIndex(i < order.Length ? order[i] : i);
             }
@@ -273,6 +273,7 @@ namespace ConsoleCards.Presentation.Composition
             // MP-2: in an online room the seats are the room's players, in their seat order and chosen colours.
             bool inRoom = host.HasOnline && host.Online.InRoom;
             if (inRoom) host.Online.FillSeats(names, colors, colorNames);
+            for (int i = 0; i < names.Length; i++) names[i] = PlayerNameLimit.Apply(names[i]); // NAME-LIMIT (owner, 2026-11-26): room names come from other computers
             model.PlayerCount = count;
             model.PlayerNames = names;
             model.PlayerColors = colors;

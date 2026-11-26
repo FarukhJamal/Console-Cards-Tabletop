@@ -23,6 +23,7 @@ namespace ConsoleCards.Presentation.UI
         public Action ToggleHandStyle;
         /// <summary>True while the log is on screen at all (open or folded): then L is the log's own key.</summary>
         public Func<bool> IsLogShown;
+        public Func<bool> ChatCueEnded; // CHAT-CUE: true once the unread chat cue is over (the Log was opened)
         /// <summary>Board 7B: true while a menu, panel or popup is open; then B and Enter are not the HUD's.</summary>
         public Func<bool> KeysBlocked;
     }
@@ -621,6 +622,39 @@ namespace ConsoleCards.Presentation.UI
         public void SetLogUnread(bool unread)
         {
             if (logUnread != null && logUnread.activeSelf != unread) logUnread.SetActive(unread);
+            // CHAT-CUE (owner, 2026-11-26): the dot above needs an object the prefab may not have, so the Log button (and the
+            // rail's +/- button, when the rail is folded) also pulses while a message is unread. No object is made here.
+            if (logUnreadPulsing == unread || logButton == null) return;
+            logUnreadPulsing = unread;
+            if (unread)
+            {
+                logButtonScale = logButton.transform.localScale;
+                if (railToggle != null) railToggleScale = railToggle.transform.localScale;
+                return;
+            }
+
+            logButton.transform.localScale = logButtonScale;
+            if (railToggle != null) railToggle.transform.localScale = railToggleScale;
+        }
+
+        private bool logUnreadPulsing;
+        private Vector3 logButtonScale = Vector3.one;
+        private Vector3 railToggleScale = Vector3.one;
+        private const float LogUnreadPulseScale = 0.16f;
+
+        // CHAT-CUE: a steady pulse on the Log button while a chat message from another player is unread. No allocation.
+        private void PulseLogUnread()
+        {
+            if (!logUnreadPulsing || logButton == null) return;
+            if (actions != null && actions.ChatCueEnded != null && actions.ChatCueEnded())
+            {
+                SetLogUnread(false);
+                return;
+            }
+
+            float k = 1f + (LogUnreadPulseScale * (0.5f + (0.5f * Mathf.Sin(Time.unscaledTime * 6f))));
+            logButton.transform.localScale = logButtonScale * k;
+            if (railToggle != null) railToggle.transform.localScale = railToggleScale * k;
         }
 
         public void SetShopVisible(bool visible)
@@ -950,6 +984,7 @@ namespace ConsoleCards.Presentation.UI
             FadeNews();
             PopNews(); // N1
             PulsePlayer();
+            PulseLogUnread(); // CHAT-CUE
             Keyboard keyboard = Keyboard.current;
             if (actions == null || keyboard == null) return;
             bool l = keyboard.lKey.wasPressedThisFrame;

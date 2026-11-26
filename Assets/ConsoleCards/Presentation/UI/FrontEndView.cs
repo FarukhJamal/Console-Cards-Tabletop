@@ -696,7 +696,11 @@ namespace ConsoleCards.Presentation.UI
                 string colourName = i < model.PlayerColorNames.Count ? model.PlayerColorNames[i] : string.Empty;
                 if (row.badge != null) row.badge.text = "P" + (i + 1);
                 if (row.badgePlate != null) row.badgePlate.color = colour;
-                if (row.name != null) row.name.text = i < model.PlayerNames.Count ? model.PlayerNames[i] : $"Player {i + 1}";
+                if (row.name != null)
+                {
+                    row.name.text = i < model.PlayerNames.Count ? model.PlayerNames[i] : $"Player {i + 1}";
+                    FitText.Shrink(row.name); // NAME-LIMIT (owner, 2026-11-26)
+                }
                 if (row.controller != null) row.controller.text = row.pawn != null ? "Controller: " + colourName : colourName;
                 if (row.dot != null) row.dot.color = colour;
                 if (row.pawn != null) row.pawn.color = colour;

@@ -72,7 +72,7 @@ namespace ConsoleCards.Presentation.Composition
         internal void RefreshProfileEntry()
         {
             if (host.runtimeUi == null) return;
-            host.runtimeUi.ShowProfileEntry(host.EnsureProfile().Active.displayName, OpenProfilePanel);
+            host.runtimeUi.ShowProfileEntry(PlayerNameLimit.Apply(host.EnsureProfile().Active.displayName), OpenProfilePanel) /* NAME-LIMIT (owner, 2026-11-26) */;
         }
 
         internal void OfferProfileChoiceAtStart()
@@ -82,7 +82,7 @@ namespace ConsoleCards.Presentation.Composition
             if (host.EnsureProfile().List().Count > 1)
             {
                 ShowProfilePanel("Who is playing? Pick your profile, or close this to keep playing as "
-                    + $"{host.profiles.Active.displayName}.", true);
+                    + $"{PlayerNameLimit.Apply(host.profiles.Active.displayName)}.", true);
             }
         }
 
@@ -99,7 +99,7 @@ namespace ConsoleCards.Presentation.Composition
                 bool isActive = string.Equals(saved[i].id, service.Active.id, StringComparison.OrdinalIgnoreCase);
                 rows.Add(new ProfileRowModel(
                     saved[i].id,
-                    saved[i].displayName,
+                    PlayerNameLimit.Apply(saved[i].displayName), // NAME-LIMIT (owner, 2026-11-26)
                     isActive ? "Playing now" : LastPlayedText(saved[i].lastUsedUtc),
                     isActive));
             }
@@ -126,7 +126,7 @@ namespace ConsoleCards.Presentation.Composition
                 ? CycleAvatar
                 : (Action)null;
             profilePanelActions.OpenPersona = personas != null && personas.CharacterCustomizer ? host.PersonaPanel.Open : (Action)null;
-            ProfilePanelModel model = new ProfilePanelModel(service.Active.displayName, rows, text)
+            ProfilePanelModel model = new ProfilePanelModel(PlayerNameLimit.Apply(service.Active.displayName), rows, text)
             {
                 AvatarText = profilePanelActions.CycleAvatar != null
                     ? $"Avatar: {personas.AvatarName(service.Active.avatar)}  >"
@@ -170,6 +170,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void CreateProfile(string displayName)
         {
+            displayName = PlayerNameLimit.Apply(displayName); // NAME-LIMIT (owner, 2026-11-26): at most 16 characters
             if (host.EnsureProfile().Create(displayName, out string error) == null)
             {
                 ShowProfilePanel(error, false);
@@ -181,6 +182,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void RenameProfile(string displayName)
         {
+            displayName = PlayerNameLimit.Apply(displayName); // NAME-LIMIT (owner, 2026-11-26)
             if (!host.EnsureProfile().RenameActive(displayName, out string error))
             {
                 ShowProfilePanel(error, false);
@@ -188,7 +190,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             RefreshProfileEntry();
-            ShowProfilePanel($"This profile is now called {host.profiles.Active.displayName}.", true);
+            ShowProfilePanel($"This profile is now called {PlayerNameLimit.Apply(host.profiles.Active.displayName)}.", true);
         }
 
         // Every store reads the profile when it starts, so the table starts again for the new profile: the scene is

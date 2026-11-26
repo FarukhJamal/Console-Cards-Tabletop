@@ -98,6 +98,17 @@ namespace ConsoleCards.Presentation.Views.Containers
             new Dictionary<TabletopObjectId, TrayArrival>();
         private Vector3 trayHandoffWorldPosition;
         private Quaternion trayHandoffWorldRotation;
+        // DRAW-STAGGER (owner, 2026-11-26): cards that fly into the tray together (a draw, the Buy Phase deal) arrive one after
+        // another. A new arrival waits at its start pose until its time (the batch's first arrival + index * gap), then its
+        // normal flight (trayArrivals) begins. Presentation only; the gap matches the table-edge row (HandDrawGapSeconds).
+        private const float TrayDrawGapSeconds = 0.12f;
+        private const float TrayDrawBatchWindowSeconds = 0.2f;
+        private const int TrayDrawMaxStaggered = 14;
+        private readonly Dictionary<TabletopObjectId, float> trayArrivalHolds =
+            new Dictionary<TabletopObjectId, float>();
+        private float trayArrivalBatchStart = -10f;
+        private float trayArrivalLastNoted = -10f;
+        private int trayArrivalBatchCount;
 
         public bool IsBound => isBound;
 
@@ -832,6 +843,7 @@ namespace ConsoleCards.Presentation.Views.Containers
 
                     trayMotions.Remove(previousCard.ObjectId);
                     trayArrivals.Remove(previousCard.ObjectId); // HAND-4
+                    trayArrivalHolds.Remove(previousCard.ObjectId); // DRAW-STAGGER
                 }
             }
 
@@ -859,11 +871,13 @@ namespace ConsoleCards.Presentation.Views.Containers
                 }
 
                 TabletopObjectId cardId = card.ObjectId;
+                bool newArrival = !trayPlanSnaps && !trayMotions.ContainsKey(cardId);
                 TrayMotion motion = trayPlanSnaps
                     ? RestTrayMotion(i)
                     : trayMotions.TryGetValue(cardId, out TrayMotion current)
                         ? current
                         : CaptureTrayMotion(card);
+                if (newArrival) NoteTrayArrivalHold(cardId); // DRAW-STAGGER
                 trayMotions[cardId] = motion;
                 ApplyTrayMotion(card, motion);
             }
@@ -920,6 +934,7 @@ namespace ConsoleCards.Presentation.Views.Containers
                     // Held on the table by a drag: forget the tray pose so it re-enters from wherever it is.
                     trayMotions.Remove(cardId);
                     trayArrivals.Remove(cardId); // HAND-4
+                    trayArrivalHolds.Remove(cardId); // DRAW-STAGGER
                     continue;
                 }
 
@@ -935,9 +950,24 @@ namespace ConsoleCards.Presentation.Views.Containers
                     trayMotions.Remove(cardId);
                 }
 
+                bool freshMotion = !trayMotions.ContainsKey(cardId);
                 TrayMotion motion = trayMotions.TryGetValue(cardId, out TrayMotion current)
                     ? current
                     : CaptureTrayMotion(card);
+                if (freshMotion) NoteTrayArrivalHold(cardId);
+                if (trayArrivalHolds.TryGetValue(cardId, out float holdUntil))
+                {
+                    if (Time.unscaledTime < holdUntil)
+                    {
+                        // DRAW-STAGGER: not this card's turn yet; it waits where it started.
+                        trayMotions[cardId] = motion;
+                        ApplyTrayMotion(card, motion);
+                        continue;
+                    }
+
+                    trayArrivalHolds.Remove(cardId);
+                }
+
                 bool selected = cardId == selectedCardId || assistedSelectedCardIds.Contains(cardId);
                 bool hovered = !selected && cardId == hoveredCardId;
                 float spread = 0f;
@@ -1077,6 +1107,29 @@ namespace ConsoleCards.Presentation.Views.Containers
             return motion;
         }
 
+        // DRAW-STAGGER: a card newly flying into the tray (HAND-4 recorded its arrival) waits for its turn in the batch of cards
+        // that arrived within TrayDrawBatchWindowSeconds of each other: the first at once, the next TrayDrawGapSeconds later, and so on.
+        // A hold is noted once per card; a later capture (the draw tween handing over) keeps the first time.
+        private void NoteTrayArrivalHold(TabletopObjectId cardId)
+        {
+            if (!trayArrivals.ContainsKey(cardId) || trayArrivalHolds.ContainsKey(cardId))
+            {
+                return;
+            }
+
+            float now = Time.unscaledTime;
+            if (now - trayArrivalLastNoted > TrayDrawBatchWindowSeconds)
+            {
+                trayArrivalBatchStart = now;
+                trayArrivalBatchCount = 0;
+            }
+
+            trayArrivalLastNoted = now;
+            trayArrivalHolds[cardId] = trayArrivalBatchStart
+                + (Mathf.Min(trayArrivalBatchCount, TrayDrawMaxStaggered) * TrayDrawGapSeconds);
+            trayArrivalBatchCount++;
+        }
+
         // HAND-4: how far in front of the camera a world point lies (1 for an orthographic camera, where distance does not change size).
         private float TrayCameraDepth(Vector3 world)
         {
@@ -1214,6 +1267,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             trayHandoffActive = false;
             trayMotions.Clear();
             trayArrivals.Clear(); // HAND-4
+            trayArrivalHolds.Clear(); // DRAW-STAGGER
         }
 
         private static Quaternion FlattenToRest(Quaternion current, Quaternion rest)

@@ -190,7 +190,12 @@ namespace ConsoleCards.Presentation.UI
                 slot.root.SetActive(shown);
                 if (!shown) continue;
                 TrapFloorHudPlayer player = players[i];
-                if (slot.name != null) slot.name.text = player.Name;
+                if (slot.name != null)
+                {
+                    slot.name.text = PlayerNameLimit.Apply(player.Name); // NAME-LIMIT (owner, 2026-11-26): private-view names come from another computer
+                    FitText.Shrink(slot.name);
+                }
+
                 if (slot.dot != null)
                 {
                     slot.dot.color = player.Color;

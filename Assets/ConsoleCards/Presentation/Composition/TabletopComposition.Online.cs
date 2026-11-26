@@ -201,7 +201,10 @@ namespace ConsoleCards.Presentation.Composition
         private bool MayCommitFirstPhysicalState() => online == null || !online.IsClientTable;
 
         /// <summary>The name a player plays under online (their profile name), else null.</summary>
-        internal string OnlinePlayerName(PlayerId player) => online != null ? online.NameOf(player) : null;
+        internal string OnlinePlayerName(PlayerId player) => online != null ? NameOrNull(online.NameOf(player)) : null;
+
+        // NAME-LIMIT (owner, 2026-11-26): a name received from another computer is cut to 16 characters where it is shown.
+        private static string NameOrNull(string name) => string.IsNullOrEmpty(name) ? name : ConsoleCards.Presentation.UI.PlayerNameLimit.Apply(name);
 
         /// <summary>
         /// False (with the reason shown) when this computer may not change the whole table now: a joined player's

@@ -134,6 +134,41 @@ namespace ConsoleCards.Presentation.Composition
             SendWholeTable(); // everyone, the sender too, gets the host's table
         }
 
+        // HOST-FORCE (owner, 2026-11-26): No soft-locks (timeouts, host force/skip, checkpoints). The host runs one step for
+        // a seat that plays elsewhere (a guest who left or is stuck), exactly as it runs that guest's End Turn: the seat counts
+        // as played here while the step runs, then every computer gets the host's table. Only the host's own menu reaches this;
+        // a joined computer has no message for it, so a guest can never force anything (false here when not hosting).
+        internal bool RunHostForced(PlayerId seat, Action step)
+        {
+            if (!sharedTable || !hosting || privateHosting || step == null) return false;
+            hostActingFor = seat.Value;
+            try
+            {
+                step();
+            }
+            finally
+            {
+                hostActingFor = Guid.Empty;
+            }
+
+            dirty = false;
+            matchReplaced = false;
+            SendWholeTable();
+            return true;
+        }
+
+        // HOST-FORCE (owner, 2026-11-26): the same notice on the host's screen and on every joined computer's (no hidden information in it).
+        internal void AnnounceHostForced(string text)
+        {
+            host.ShowNotice(text);
+            if (!sharedTable || !hosting) return;
+            for (int i = 0; i < members.Count; i++)
+            {
+                Member member = members[i];
+                if (!member.IsHost && member.Connected && member.Connection >= 0) SendNotice(member, text);
+            }
+        }
+
         /// <summary>
         /// Foundation stage (audit A2, owner "OK", 2026-11-13: "one host-authority check applied to host and guest
         /// commands alike"): on the host of a normal shared room, a command the host's own player makes meets the same

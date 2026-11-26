@@ -6511,7 +6511,7 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        internal List<PopupActionOption> BuildTrapFloorTurnActions()
+        private List<PopupActionOption> BuildTrapFloorTurnActionsCore() // HOST-FORCE (owner, 2026-11-26): BuildTrapFloorTurnActions (HostRules.cs) adds the host's entries
         {
             List<PopupActionOption> actions = new List<PopupActionOption>();
             if (host.trapFloorTurnState == null)

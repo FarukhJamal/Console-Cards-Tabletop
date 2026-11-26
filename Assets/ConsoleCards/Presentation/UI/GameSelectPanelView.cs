@@ -509,4 +509,22 @@ namespace ConsoleCards.Presentation.UI
         private void HandleStart() => actions?.Start?.Invoke();
         private void HandleDelete() => actions?.Delete?.Invoke();
     }
+
+    /// <summary>
+    /// NAME-LIMIT (owner, 2026-11-26: a long name overflowed the player chip, "Player 1Tester Two"): a player's name has at most
+    /// <see cref="Max"/> characters, trimmed, wherever it is typed, loaded or received.
+    /// </summary>
+    public static class PlayerNameLimit
+    {
+        public const int Max = 16;
+
+        public static string Apply(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return name ?? string.Empty;
+            string trimmed = name.Trim();
+            if (trimmed.Length <= Max) return trimmed;
+            int length = char.IsHighSurrogate(trimmed[Max - 1]) ? Max - 1 : Max; // never cut an emoji in half
+            return trimmed.Substring(0, length).TrimEnd();
+        }
+    }
 }

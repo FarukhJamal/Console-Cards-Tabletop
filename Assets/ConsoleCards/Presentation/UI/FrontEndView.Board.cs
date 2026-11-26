@@ -111,6 +111,7 @@ namespace ConsoleCards.Presentation.UI
         {
             if (Find("TopBar/Right/Profile") == null) return;
             SetText("TopBar/Right/Profile/Name", Upper(model.ProfileName));
+            FitLine("TopBar/Right/Profile/Name"); // NAME-LIMIT (owner, 2026-11-26)
             ShowPicture(Picture("TopBar/Right/Profile/Avatar"), model.AvatarPicture); // PROFILE-2: the player's face
             bool sheet = page == FrontEndPage.Details && HasBoardSheet;
             SetActive("TopBar/Right", !sheet);
@@ -354,6 +355,7 @@ namespace ConsoleCards.Presentation.UI
                 SetText(seat + "/Colour", i < model.PlayerColorNames.Count ? Upper(model.PlayerColorNames[i]) : string.Empty);
                 string name = i < model.PlayerNames.Count ? model.PlayerNames[i] : $"Player {i + 1}";
                 SetText(seat + "/Name", i == 0 ? $"{Upper(name)} (you)" : name);
+                FitLine(seat + "/Name"); // NAME-LIMIT (owner, 2026-11-26): a long name shrinks to stay in the chip
                 SetInteractable(seat, model.CanChangeColours);
             }
 

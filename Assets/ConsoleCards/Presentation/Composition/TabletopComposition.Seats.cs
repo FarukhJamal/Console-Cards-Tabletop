@@ -358,6 +358,27 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
+        // SETTINGS-EXIT (owner, 2026-11-26: the Settings exit is hidden behind the Console): the screen hand is a 3D tray 0.75 in
+        // front of the camera over the bottom of the screen, so it draws over the Settings board's BACK button. While the board
+        // is open the tray slides away (as for a hot-seat handover), and returns when it closes. Presentation only.
+        private bool settingsClearedTray;
+
+        private void UpdateSettingsTray()
+        {
+            bool open = runtimeUi != null && runtimeUi.IsTableSettingsOpen;
+            if (open == settingsClearedTray) return;
+            if (open)
+            {
+                if (handTrayRig == null || !handTrayRig.isActiveAndEnabled || seatSwitchPending || hotSeatHandoverOpen) return;
+                settingsClearedTray = true;
+                handTrayRig.SetCleared(true);
+                return;
+            }
+
+            settingsClearedTray = false;
+            if (!seatSwitchPending && !hotSeatHandoverOpen && seatRevealAt < 0f) handTrayRig?.SetCleared(false);
+        }
+
         private void CloseHotSeatHandover()
         {
             hotSeatHandoverOpen = false;

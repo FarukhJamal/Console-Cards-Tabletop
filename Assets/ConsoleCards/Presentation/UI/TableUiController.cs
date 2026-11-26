@@ -40,6 +40,7 @@ namespace ConsoleCards.Presentation.UI
         private bool viewSettingsWarned;
         private ActivityLogView activityLogView;
         private Action<string> chatSend; // CHAT-1
+        private bool chatUnreadFromOthers; // CHAT-CUE (owner, 2026-11-26): a message arrived while the Log was closed
         private string chatText = string.Empty;
         private bool activityLogUnavailable;
         private ContentArtPanelView contentArtPanelView;
@@ -1110,6 +1111,21 @@ namespace ConsoleCards.Presentation.UI
         {
             chatText = text ?? string.Empty;
             if (activityLogView != null && activityLogView.IsAcquired) activityLogView.SetChat(chatText, fromOthers);
+            // CHAT-CUE (owner, 2026-11-26: no sign that a message came while the chat was closed): the Log button shows the cue
+            // even when the Log view had not raised it itself. Cleared when the Log opens (LateUpdate / ToggleLog).
+            if (fromOthers && !IsLogShown())
+            {
+                chatUnreadFromOthers = true;
+                if (IsVisible(tableHudView)) tableHudView.SetLogUnread(true);
+            }
+        }
+
+        // CHAT-CUE: the Log was opened by any route (its folded tab, the L key): the cue ends. Polled by the HUD while it pulses.
+        private bool ChatCueEnded()
+        {
+            if (!chatUnreadFromOthers || !IsLogShown()) return false;
+            chatUnreadFromOthers = false;
+            return !activityLogView.ChatUnread;
         }
 
         /// <summary>Shows the hot-seat handover cover (doc 25, H2). False when its Final UI prefab is missing.</summary>
@@ -1681,6 +1697,7 @@ namespace ConsoleCards.Presentation.UI
                     OpenShop = () => hudShop?.Invoke(),
                     ToggleHandStyle = () => hudHandStyle?.Invoke(),
                     IsLogShown = IsLogOnScreen,
+                    ChatCueEnded = ChatCueEnded, // CHAT-CUE
                     KeysBlocked = HudKeysBlocked,
                 },
                 title);
@@ -1688,7 +1705,8 @@ namespace ConsoleCards.Presentation.UI
             tableHudView.SetShopVisible(hudShop != null);
             tableHudView.SetToolsVisible(hudChooseTool != null && IsVisible(toolBarView));
             tableHudView.SetHandStyleVisible(hudHandStyle != null && IsVisible(toolBarView));
-            tableHudView.SetLogUnread(activityLogView != null && activityLogView.IsAcquired && activityLogView.ChatUnread);
+            tableHudView.SetLogUnread(chatUnreadFromOthers
+                || (activityLogView != null && activityLogView.IsAcquired && activityLogView.ChatUnread)); // CHAT-CUE
             ApplyTableHudMode();
         }
 
@@ -1728,15 +1746,18 @@ namespace ConsoleCards.Presentation.UI
             {
                 activityLogView.Show();
                 // Owner, 2026-11-20: with a message unread, the Log opens on its Chat tab.
-                if (activityLogView.ChatUnread && activityLogView.HasChat) activityLogView.OpenChat();
+                bool unreadChat = activityLogView.ChatUnread || chatUnreadFromOthers; // CHAT-CUE
+                chatUnreadFromOthers = false;
+                if (unreadChat && activityLogView.HasChat) activityLogView.OpenChat();
                 else activityLogView.SetExpanded(true);
+                MarkChatUnread(activityLogView.ChatUnread);
             }
         }
 
         // The rail's Log button carries a dot while a chat message is unread.
         private void MarkChatUnread(bool unread)
         {
-            if (IsVisible(tableHudView)) tableHudView.SetLogUnread(unread);
+            if (IsVisible(tableHudView)) tableHudView.SetLogUnread(unread || chatUnreadFromOthers); // CHAT-CUE
         }
 
         /// <summary>Opens the rulebook (HUD-B): the book button, or the rulebook lying on the table.</summary>

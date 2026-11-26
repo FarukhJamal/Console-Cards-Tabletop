@@ -1085,6 +1085,7 @@ namespace ConsoleCards.Presentation.Composition
                 }
 
                 UpdateHotSeat();
+                UpdateSettingsTray(); // SETTINGS-EXIT
                 // SOFTLOCK-1: a move whose final state never came (not while a piece is in this player's hand: that move is live)
                 if (moveCoordinator == null || moveCoordinator.ActiveView == null) SessionService.ExpireStaleUndoTransaction();
             }

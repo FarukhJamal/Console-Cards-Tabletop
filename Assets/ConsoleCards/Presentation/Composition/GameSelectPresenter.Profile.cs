@@ -31,7 +31,7 @@ namespace ConsoleCards.Presentation.Composition
                 ProfileInfo profile = saved[i];
                 bool active = string.Equals(profile.id, service.Active.id, StringComparison.OrdinalIgnoreCase);
                 Texture avatar = personas != null && personas.AvatarCount > 0 ? personas.Avatar(profile.avatar) : null;
-                FrontEndProfile card = new FrontEndProfile(profile.id, profile.displayName,
+                FrontEndProfile card = new FrontEndProfile(profile.id, PlayerNameLimit.Apply(profile.displayName), // NAME-LIMIT (owner, 2026-11-26)
                     active ? "Playing now" : PlayedLine(profile), avatar, ProfileColourOf(profile), active);
                 if (active) cards.Insert(0, card);
                 else cards.Add(card);
@@ -94,7 +94,8 @@ namespace ConsoleCards.Presentation.Composition
         {
             profileDeleteArmed = false;
             ProfileService service = host.EnsureProfile();
-            if (string.Equals((name ?? string.Empty).Trim(), service.Active.displayName, StringComparison.Ordinal)) return;
+            name = PlayerNameLimit.Apply(name); // NAME-LIMIT (owner, 2026-11-26): at most 16 characters
+            if (string.Equals(name, service.Active.displayName, StringComparison.Ordinal)) return;
             profileSaved = service.RenameActive(name, out string error);
             host.ProfilePanel.RefreshProfileEntry();
             ShowGameSelect(profileSaved ? string.Empty : error);

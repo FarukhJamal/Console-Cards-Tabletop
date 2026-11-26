@@ -1180,7 +1180,7 @@ namespace ConsoleCards.Presentation.Composition
                     ? $"Deck: {game.deck.name}, shuffled at Start. {TableSummary(game.table ?? new SavedTable())}"
                     : TableSummary(game.table ?? new SavedTable()),
                 CanChangeDeck = false,
-                ProfileName = host.EnsureProfile().Active.displayName,
+                ProfileName = PlayerNameLimit.Apply(host.EnsureProfile().Active.displayName), // NAME-LIMIT (owner, 2026-11-26)
                 CanOpenCardArt = false,
                 CanEditCards = false,
                 CanEditDecks = false,
