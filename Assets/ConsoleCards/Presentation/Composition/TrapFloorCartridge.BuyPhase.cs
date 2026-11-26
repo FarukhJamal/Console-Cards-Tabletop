@@ -284,6 +284,7 @@ namespace ConsoleCards.Presentation.Composition
         private PlayerId buyPhaseSeenNext;
         private bool buyPhaseSeen;
         private bool buyPhaseNoticeWaitsForAvatars; // AVATAR-FIRST
+        private bool buyPhaseAvatarsPendingShown; // AVATAR-BAR
 
         // TickEarly: notices a Buy Phase that just opened (here or on the host), and deals it once on the dealing computer.
         internal void TickBuyPhase()
@@ -293,6 +294,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 buyPhaseSeen = false;
                 buyPhaseNoticeWaitsForAvatars = false;
+                buyPhaseAvatarsPendingShown = false;
                 return;
             }
 
@@ -309,15 +311,24 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             // AVATAR-FIRST (owner, 2026-11-26): the notice, then the deal, wait until every seat has locked an Avatar or pressed Later.
-            if (buyPhaseNoticeWaitsForAvatars && !AvatarChoicePending())
+            // AVATAR-BAR (two-copy test, 2026-11-27): the round bar is refreshed whenever the wait for the Avatars starts or ends
+            // (a joined computer is released by the host's deal, which arrives with the table, not through this flag); it
+            // kept "CHOOSE AVATARS FIRST" with the cards dealt.
+            bool avatarsPending = AvatarChoicePending();
+            if (avatarsPending != buyPhaseAvatarsPendingShown)
             {
-                buyPhaseNoticeWaitsForAvatars = false;
-                AnnounceBuyPhase();
+                buyPhaseAvatarsPendingShown = avatarsPending;
+                if (!avatarsPending && buyPhaseNoticeWaitsForAvatars)
+                {
+                    buyPhaseNoticeWaitsForAvatars = false;
+                    AnnounceBuyPhase();
+                }
+
                 RefreshTrapFloorStatusUi();
             }
 
             if (turn.IsBuyPhaseDealt
-                || AvatarChoicePending()
+                || avatarsPending
                 || !IsDealingComputer
                 || host.undoTransactionInProgress
                 || host.rebuildingFromUndo

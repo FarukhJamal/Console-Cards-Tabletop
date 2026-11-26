@@ -193,6 +193,7 @@ namespace ConsoleCards.Presentation.Composition
         private const int ContentPartHeader = 13;
         private const int ContentPartsInFlight = 4;
         private const int ContentPartsPerFrame = 3;
+        private const float ContentStallSeconds = 6f; // CONTENT-STALL
         private const long ContentBundleMargin = 1024L * 1024L; // the bundle's own headers (names, sizes) on top of MaxContentBytes
 
         private byte[] contentPartBuffer; // host: one buffer for every part sent (the session copies it)
@@ -222,6 +223,7 @@ namespace ConsoleCards.Presentation.Composition
             member.ContentSending = hostContentHash;
             member.ContentNext = 0;
             member.ContentAcked = -1;
+            member.ContentProgressAt = Time.unscaledTime;
             Debug.Log($"[Online] Sending the room's content to {member.Name}: {ContentPartCount(hostContentBundle.Length)} parts, {hostContentBundle.Length / 1024} KB.");
         }
 
@@ -255,6 +257,17 @@ namespace ConsoleCards.Presentation.Composition
 
                 int length = member.ContentBundle.Length;
                 int count = ContentPartCount(length);
+                // CONTENT-STALL (two-copy test, 2026-11-27): a guest sat in the lobby ("Waiting for the host") while the game ran:
+                // the parts in flight were never confirmed and nothing sent them again (the joined computer takes parts only in
+                // order, so one missing part stops the transfer for good). No progress for a while: send again from the first
+                // part not confirmed.
+                if (member.ContentNext > member.ContentAcked + 1 && Time.unscaledTime - member.ContentProgressAt > ContentStallSeconds)
+                {
+                    Debug.Log($"[Online] The content to {member.Name} stopped at part {member.ContentAcked + 1} of {count}: sending again from there.");
+                    member.ContentNext = member.ContentAcked + 1;
+                    member.ContentProgressAt = Time.unscaledTime;
+                }
+
                 int sent = 0;
                 while (member.ContentNext < count && member.ContentNext - (member.ContentAcked + 1) < ContentPartsInFlight && sent++ < ContentPartsPerFrame)
                 {
@@ -278,8 +291,17 @@ namespace ConsoleCards.Presentation.Composition
             if (member.ContentBundle == null || data.Length < 5) return;
             int count = ContentPartCount(member.ContentBundle.Length);
             int index = BitConverter.ToInt32(data, 1);
-            if (index < 0 || index >= count || index >= member.ContentNext) return;
-            if (index > member.ContentAcked) member.ContentAcked = index;
+            if (index < 0 || index >= count) return;
+            if (index >= member.ContentNext) member.ContentNext = index + 1; // CONTENT-STALL: a part confirmed again after a re-send
+            if (index > member.ContentAcked)
+            {
+                // CONTENT-STALL diagnostics: every tenth of the transfer, how far it got (no names of files, no content).
+                if ((index + 1) * 10 / count > (member.ContentAcked + 1) * 10 / count)
+                    Debug.Log($"[Online] Content to {member.Name}: {(index + 1) * 100 / count}% confirmed.");
+                member.ContentAcked = index;
+                member.ContentProgressAt = Time.unscaledTime; // CONTENT-STALL
+            }
+
             if (member.ContentAcked < count - 1) return;
             member.ContentHash = member.ContentSending; // only now does the computer count as having the content
             StopContentTransfer(member);
@@ -324,6 +346,15 @@ namespace ConsoleCards.Presentation.Composition
             }
             else if (contentIncoming == null || count != contentIncomingCount || total != contentIncoming.Length - 1 || index != contentIncomingParts)
             {
+                // CONTENT-STALL: a part sent again that is already here (its confirmation was lost) is confirmed again, so the
+                // host moves on.
+                if (contentIncoming != null && count == contentIncomingCount && total == contentIncoming.Length - 1 && index < contentIncomingParts)
+                {
+                    BeginMessage(MsgContentAck);
+                    writer.Write(contentIncomingParts - 1);
+                    SendToHost();
+                }
+
                 return; // not part of the transfer in progress
             }
 

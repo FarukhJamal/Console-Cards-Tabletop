@@ -120,6 +120,7 @@ namespace ConsoleCards.Presentation.Composition
         private readonly Dictionary<PlayerId, float> avatarDraftSentAt = new Dictionary<PlayerId, float>();
         private object avatarDraftMatch;
         private MatchId avatarDraftMatchId; // AVATAR-FIRST
+        private long avatarDraftRevision = -1; // AVATAR-RESET
         private PlayerId avatarDraftOpenHere = PlayerId.Empty;
 
         // Polish (owner, 2026-11-13): an Avatar someone has locked stays in the popup, greyed and "Taken by X"; when another
@@ -154,7 +155,18 @@ namespace ConsoleCards.Presentation.Composition
                 avatarDraftAsked.Clear();
                 // AVATAR-FIRST: a "Later" answer survives a rebuild of the same table (a resync), so the host's and the other
                 // computers' picture of who has answered does not reset; a new table (new match) starts clean.
-                if (!avatarDraftMatchId.Equals(host.matchState.Id)) avatarDraftLater.Clear();
+                // AVATAR-RESET (two-copy test, 2026-11-27): Reset Table keeps the MatchId (it restores the table's start), so a
+                // Later from before the reset survived it: the host was never asked again and the Buy Phase was dealt without
+                // the host's answer. The same table going back to an earlier revision before the Buy Phase is dealt (a reset,
+                // an Undo of the deal) asks everyone again, on every computer alike (each sees the same revision).
+                bool sameMatch = avatarDraftMatchId.Equals(host.matchState.Id);
+                bool rewound = sameMatch && host.matchState.Revision < avatarDraftRevision
+                    && host.trapFloorTurnState != null && !host.trapFloorTurnState.IsBuyPhaseDealt;
+                if (!sameMatch || rewound)
+                {
+                    if (rewound && avatarDraftLater.Count > 0) Debug.Log("[Draft] The table went back to an earlier point: every Avatar question is asked again.");
+                    avatarDraftLater.Clear();
+                }
                 avatarDraftMatchId = host.matchState.Id;
                 avatarDraftSeen.Clear();
                 avatarDraftSentAt.Clear();
@@ -165,6 +177,7 @@ namespace ConsoleCards.Presentation.Composition
                 avatarDraftNews = string.Empty;
             }
 
+            avatarDraftRevision = host.matchState.Revision; // AVATAR-RESET
             // A new or rebuilt table only learns who has an Avatar (no news); afterwards each new lock is announced.
             int taken = NoteAvatarLocks(freshTable);
             bool havePile = host.matchState.Containers.TryGetValue(TrapFloorTemplateFactory.AvatarDeckId, out ContainerState pile);
@@ -367,7 +380,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 TrapFloorPlayerSetupDefinition setup = host.trapFloorTemplate.Players[i];
                 if (!host.matchState.Seats.TryGetValue(setup.SeatId, out SeatState seat) || seat.OccupantPlayerId.IsEmpty) continue;
-                if (!avatarDraftLater.Contains(seat.OccupantPlayerId) && !TryGetSeatAvatar(setup, out _)) return StillWaitingForAvatars();
+                if (!avatarDraftLater.Contains(seat.OccupantPlayerId) && !TryGetSeatAvatar(setup, out _)) return StillWaitingForAvatars(seat.OccupantPlayerId);
             }
 
             return false;
@@ -379,13 +392,23 @@ namespace ConsoleCards.Presentation.Composition
         private object avatarWaitMatch;
         private float avatarWaitSince;
 
-        private bool StillWaitingForAvatars()
+        private bool StillWaitingForAvatars(PlayerId player)
         {
             if (!IsDealingComputer || !host.IsOnlineTable) return true;
             if (!ReferenceEquals(avatarWaitMatch, host.matchState))
             {
                 avatarWaitMatch = host.matchState;
                 avatarWaitSince = UnityEngine.Time.unscaledTime;
+            }
+
+            // AVATAR-WAIT (two-copy test, 2026-11-27): the wait timed out with the host's own question open and while the
+            // guest's computer was still loading the room's content (it had not been asked yet). A player at this computer
+            // is always waited for (they can press Later); the clock starts once they have answered and every other
+            // computer has the table.
+            if (host.IsPlayerOnThisComputer(player) || (host.HasOnline && host.Online.IsReceivingContent(player)))
+            {
+                if (avatarWaitSince >= 0f) avatarWaitSince = UnityEngine.Time.unscaledTime;
+                return true;
             }
 
             if (UnityEngine.Time.unscaledTime - avatarWaitSince < AvatarWaitSeconds) return true;

@@ -143,6 +143,7 @@ namespace ConsoleCards.Presentation.Composition
             public string ContentSending = string.Empty; // host only, CONTENT-1: the hash of that bundle
             public int ContentNext; // host only, CONTENT-1: the next part to send
             public int ContentAcked = -1; // host only, CONTENT-1: the highest part it confirmed
+            public float ContentProgressAt; // host only, CONTENT-STALL: when the transfer last moved on
             public float LastHeardAt = -1f; // host only, audit T-3: when anything last came from it
             public bool SendsAlive; // host only, audit T-3: it says "still here", so its silence means it is gone
             public readonly Inbox FromClient = new Inbox(); // host only: ordered messages from it
@@ -231,6 +232,18 @@ namespace ConsoleCards.Presentation.Composition
             if (!IsPrivateHost || !hosting || player.IsEmpty) return false;
             for (int i = 0; i < members.Count; i++)
                 if (members[i].Player == player.Value) return !members[i].IsHost;
+            return false;
+        }
+
+        /// <summary>
+        /// AVATAR-WAIT (two-copy test, 2026-11-27): on the host, the player's computer is still being sent the room's
+        /// content (it has no table yet, so it cannot have been asked anything). Allocation free.
+        /// </summary>
+        internal bool IsReceivingContent(PlayerId player)
+        {
+            if (!hosting || player.IsEmpty) return false;
+            for (int i = 0; i < members.Count; i++)
+                if (members[i].Player == player.Value) return !members[i].IsHost && members[i].ContentBundle != null;
             return false;
         }
 
