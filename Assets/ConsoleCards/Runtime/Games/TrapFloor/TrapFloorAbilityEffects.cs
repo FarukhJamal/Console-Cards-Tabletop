@@ -24,7 +24,7 @@ namespace ConsoleCards.Games.TrapFloor
         Athlete = 2,
         /// <summary>Arm and Disarm: disarms 2 adjacent tiles; rearms up to the 2 nearest triggered traps within 2 tiles.</summary>
         Engineer = 3,
-        /// <summary>Shield: also saves them from falling (a collapse, or a Crane or Spring that drops them off the floor).</summary>
+        /// <summary>SHIELD-ALL (owner, 2026-11-26): no longer saves from a collapse; the Strategist has no special effect left.</summary>
         Strategist = 4,
     }
 
@@ -388,10 +388,10 @@ namespace ConsoleCards.Games.TrapFloor
         }
 
         /// <summary>
-        /// The card that saves this player from falling (owner, 2026-11-17): Insurance first (their tile collapses, or a
-        /// Trap drops them onto a hole), then Shield when the player is the Strategist (only when their tile collapses:
-        /// <paramref name="collapse"/>). The card must lie in the player's hand, their Ability area or their Console, or
-        /// loose beside it (theirs), and not be used yet this round. Empty: nothing saves them.
+        /// The card that saves this player from falling (owner, 2026-11-17): Insurance (their tile collapses, or a Trap
+        /// drops them onto a hole). SHIELD-ALL (owner, 2026-11-26): Shield saves no one from a collapse, the Strategist
+        /// included. The card must lie in the player's hand, their Ability area or their Console, or loose beside it
+        /// (theirs), and not be used yet this round. Empty: nothing saves them.
         /// </summary>
         public static TabletopObjectId FindSaveCard(
             MatchState match,
@@ -405,8 +405,6 @@ namespace ConsoleCards.Games.TrapFloor
             if (match == null || template == null || definitionOf == null) return TabletopObjectId.Empty;
             TrapFloorPlayerSetupDefinition setup = SetupOf(match, template, player);
             if (setup == null) return TabletopObjectId.Empty;
-            bool strategist = collapse && SpecialOf(match, template, player) == TrapFloorAvatarSpecial.Strategist;
-            TabletopObjectId shield = TabletopObjectId.Empty;
             List<ContainerId> places = new List<ContainerId>(8)
             {
                 setup.HandContainerId,
@@ -426,12 +424,10 @@ namespace ConsoleCards.Games.TrapFloor
                     if (definition == null) continue;
                     TrapFloorAbilityEffect effect = TrapFloorAbilityResolutionService.ResolveEffect(definition.EffectMetadata);
                     if (effect == TrapFloorAbilityEffect.Insurance) return cardId;
-                    if (strategist && effect == TrapFloorAbilityEffect.Shield && shield.IsEmpty) shield = cardId;
                 }
             }
 
             // The player's own Abilities lying beside their Console (bought, taken or starting ones), in a fixed order.
-            TabletopObjectId looseShield = TabletopObjectId.Empty;
             TabletopObjectId looseInsurance = TabletopObjectId.Empty;
             foreach (KeyValuePair<TabletopObjectId, CardInstanceState> pair in match.Cards)
             {
@@ -442,12 +438,9 @@ namespace ConsoleCards.Games.TrapFloor
                 TrapFloorAbilityEffect effect = TrapFloorAbilityResolutionService.ResolveEffect(definition.EffectMetadata);
                 if (effect == TrapFloorAbilityEffect.Insurance && (looseInsurance.IsEmpty || pair.Key.Value.CompareTo(looseInsurance.Value) < 0))
                     looseInsurance = pair.Key;
-                if (strategist && effect == TrapFloorAbilityEffect.Shield && (looseShield.IsEmpty || pair.Key.Value.CompareTo(looseShield.Value) < 0))
-                    looseShield = pair.Key;
             }
 
-            if (!looseInsurance.IsEmpty) return looseInsurance;
-            return shield.IsEmpty ? looseShield : shield;
+            return looseInsurance;
         }
 
         /// <summary>
@@ -847,7 +840,7 @@ namespace ConsoleCards.Games.TrapFloor
         }
 
         /// <summary>
-        /// Step 5: the tile under the player collapsed and <paramref name="card"/> (Insurance, or the Strategist's Shield)
+        /// Step 5: the tile under the player collapsed and <paramref name="card"/> (Insurance)
         /// saves them: they stay on the hole and step off on their next turn. Or a teammate's Lasso (<paramref name="user"/>,
         /// owner 2026-11-17): the pawn is pulled to that teammate's tile (the computer that plays the player moves it).
         /// The caller checked the card and the hole on its own table. False when it does not apply.

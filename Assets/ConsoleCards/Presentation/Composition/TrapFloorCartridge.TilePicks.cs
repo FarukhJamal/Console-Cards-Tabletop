@@ -677,7 +677,7 @@ namespace ConsoleCards.Presentation.Composition
             return PlayerId.Empty;
         }
 
-        // ---------- Saved from a fall (Insurance; the Strategist's Shield; a teammate's Lasso) ----------
+        // ---------- Saved from a fall (Insurance; a teammate's Lasso; never Shield, SHIELD-ALL 2026-11-26) ----------
 
         // The tile under the player collapsed: a card of theirs keeps them (they stay on the hole and step off on their
         // next turn), else a teammate's Lasso pulls them to the teammate's tile (owner, 2026-11-17). False: nothing saves them.

@@ -447,15 +447,19 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly TrapFloorTemplateDefinition template;
         private readonly TrapFloorObjectiveState objectiveState;
         private readonly TrapFloorActivityFeedState activityFeed;
+        // KEYS-LEAVE (owner, 2026-11-26): null keeps a claimed Key on its tile (callers that do not pass the collapse state).
+        private readonly TrapFloorCollapseState collapseState;
 
         public TrapFloorObjectiveUseCase(
             TrapFloorTemplateDefinition template,
             TrapFloorObjectiveState objectiveState,
-            TrapFloorActivityFeedState activityFeed)
+            TrapFloorActivityFeedState activityFeed,
+            TrapFloorCollapseState collapseState = null)
         {
             this.template = template ?? throw new ArgumentNullException(nameof(template));
             this.objectiveState = objectiveState ?? throw new ArgumentNullException(nameof(objectiveState));
             this.activityFeed = activityFeed ?? throw new ArgumentNullException(nameof(activityFeed));
+            this.collapseState = collapseState;
         }
 
         public TrapFloorObjectiveResult ClaimKey(
@@ -519,6 +523,21 @@ namespace ConsoleCards.Games.TrapFloor
                 acceptedRevision,
                 command.Context.RequestedByPlayerId,
                 floorCard);
+            // KEYS-LEAVE (owner, 2026-11-26): a taken Key leaves the floor like a taken Friend: the tile is the taker's and
+            // is recorded as a taken prize, so CollectTakenPrize (TrapFloorCollectPrizeCommand) puts it beside the taker's
+            // Console once no pawn stands on it. The claim above stays the one record the Exits and Key counts read.
+            if (collapseState != null
+                && !collapseState.IsCollapsed(floorCard.ObjectId)
+                && matchState.Cards.TryGetValue(floorCard.ObjectId, out var keyTile))
+            {
+                collapseState.RecordTakenPrize(
+                    floorCard.ObjectId,
+                    floorCard.Coordinate,
+                    command.Context.RequestedByPlayerId,
+                    acceptedRevision);
+                keyTile.BaseState.SetOwner(command.Context.RequestedByPlayerId);
+            }
+
             matchState.AdvanceRevision(
                 command.Context.Id,
                 command.Context.RequestedByPlayerId,

@@ -1049,7 +1049,7 @@ namespace ConsoleCards.Games.TrapFloor
             SavedByCardId = savedByCardId;
         }
 
-        /// <summary>Step 5: the card (Insurance, or the Strategist's Shield) that kept the player from falling; the pawn stays.</summary>
+        /// <summary>Step 5: the card (Insurance) that kept the player from falling; the pawn stays.</summary>
         public TabletopObjectId SavedByCardId { get; }
 
         internal static TrapFloorLaunchResult Saved(long revision, TabletopObjectId stayFloorCardId, TrapFloorCoordinate stay, TabletopObjectId card) =>
@@ -1255,18 +1255,16 @@ namespace ConsoleCards.Games.TrapFloor
                 return ActivateOnFloor(matchState, insertion, effect, choice);
 
             bool rush = effect == TrapFloorAbilityEffect.Rush;
-            bool shield = effect == TrapFloorAbilityEffect.Shield;
             TrapFloorTrapResolutionRecord trap = null;
+            // SHIELD-ALL (owner, 2026-11-26): Shield (like Check and Dodge) answers ANY waiting trap, the Fall Trap included.
             if (!rush
                 && !state.TryGetLatestPendingTrap(
                     turnState.ActivePlayerId,
-                    shield,
+                    false,
                     out trap))
             {
                 return TrapFloorAbilityActivationResult.Failure(
-                    shield
-                        ? TrapFloorAbilityActivationError.NoPendingTrapConsequence
-                        : TrapFloorAbilityActivationError.NoUnresolvedTrap,
+                    TrapFloorAbilityActivationError.NoUnresolvedTrap,
                     effect);
             }
 

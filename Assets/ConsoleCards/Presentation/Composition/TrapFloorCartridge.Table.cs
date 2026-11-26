@@ -238,7 +238,7 @@ namespace ConsoleCards.Presentation.Composition
                 command => EffectExecutor().ClearGuidance(host.matchState, command), result => result.Succeeded);
             authority.Register<TrapFloorEliminatePlayerCommand, TrapFloorTurnAdvanceResult>(
                 command => EffectExecutor().Eliminate(host.matchState, command), result => result.Succeeded);
-            // Rules v1.151126, step 5: Insurance, or the Strategist's Shield, keeps a player whose tile collapsed.
+            // Rules v1.151126, step 5: Insurance keeps a player whose tile collapsed (SHIELD-ALL, 2026-11-26: not Shield).
             authority.Register<TrapFloorSaveFromFallCommand, TrapFloorEffectResult>(
                 command => EffectExecutor().SaveFromFall(host.matchState, command), result => result.Succeeded);
             authority.Observe<TrapFloorSaveFromFallCommand, TrapFloorEffectResult>(OnFallSaved);

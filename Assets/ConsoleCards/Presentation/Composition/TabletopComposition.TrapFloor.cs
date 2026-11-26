@@ -189,7 +189,8 @@ namespace ConsoleCards.Presentation.Composition
             trapFloorObjectiveUseCase = new TrapFloorObjectiveUseCase(
                 trapFloorTemplate,
                 trapFloorObjectiveState,
-                trapFloorActivityFeed);
+                trapFloorActivityFeed,
+                trapFloorCollapseState); // KEYS-LEAVE: a taken Key leaves its tile like a taken Friend
             trapFloorTurnService = new TrapFloorTurnService(
                 trapFloorTemplate,
                 trapFloorTurnState,

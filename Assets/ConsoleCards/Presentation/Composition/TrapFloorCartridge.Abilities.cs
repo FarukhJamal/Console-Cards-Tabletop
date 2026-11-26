@@ -121,7 +121,8 @@ namespace ConsoleCards.Presentation.Composition
                 return true;
             }
 
-            bool needsConsequence = effect == TrapFloorAbilityEffect.Shield;
+            // SHIELD-ALL (owner, 2026-11-26): Shield stops ANY triggered trap (the Fall Trap too), not only one with an applied effect.
+            bool needsConsequence = false;
             if (!TryGetWaitingTrap(player, needsConsequence, out TrapFloorTrapResolutionRecord trap))
             {
                 what = effect == TrapFloorAbilityEffect.Shield
@@ -830,6 +831,14 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             SyncDrawWithTable();
+            // DRAW3-ONCE (owner, 2026-11-26): a buyer draws their 3 Abilities once per Buy Phase. Asking again once the whole
+            // draw is bought (nothing left to open) draws nothing and says so; a draw with cards left still reopens.
+            if (IsBuyPhase && IsAbilityOfferTurn() && abilityOffer.Count > 0 && CountOfferStillInDeck(deck) == 0)
+            {
+                host.ShowMessage("You already drew your 3 Ability Cards this Buy Phase.");
+                return;
+            }
+
             // Online, several players' draws lie out in the Buy Phase: one lying out is not necessarily this player's.
             if (!IsAbilityOfferTurn() && !(IsBuyPhase && host.IsOnlineTable) && AdoptDrawLyingOut())
             {

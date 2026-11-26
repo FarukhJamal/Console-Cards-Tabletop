@@ -3622,6 +3622,7 @@ namespace ConsoleCards.Presentation.Composition
                 $"{FormatPlayerName(result.Activity.ActorPlayerId)} took {result.FloorCard.Content.DisplayName}.",
                 FeedbackSeverity.Info);
             ReturnPawnToMoveOrigin(result.Activity.ActorPlayerId, floorCardId); // rules v1.151126: one step back
+            CollectTakenPrizesOffPawns(); // KEYS-LEAVE (owner, 2026-11-26): the Key tile goes beside its taker's Console like a taken Friend
             EliminateStuckPlayers();
         }
 

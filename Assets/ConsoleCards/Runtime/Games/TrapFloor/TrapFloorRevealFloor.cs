@@ -42,7 +42,7 @@ namespace ConsoleCards.Games.TrapFloor
         /// <summary>Rules v1.151126, step 5.</summary>
         UsedJump = 24,
         UsedSafeSearch = 25,
-        /// <summary>Step 5: Insurance or the Strategist's Shield kept the player from falling.</summary>
+        /// <summary>Step 5: Insurance (or a teammate's Lasso) kept the player from falling.</summary>
         SavedFromFall = 26,
         UsedLasso = 27,
         UsedArmAndDisarm = 28,

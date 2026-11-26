@@ -100,8 +100,8 @@ namespace ConsoleCards.Games.TrapFloor
     }
 
     /// <summary>
-    /// Rules v1.151126, step 5: the tile under a player collapsed and a card of theirs (Insurance, or the Strategist's
-    /// Shield) keeps them from falling; or a teammate's Lasso pulls them to the teammate's tile (owner, 2026-11-17).
+    /// Rules v1.151126, step 5: the tile under a player collapsed and a card of theirs (Insurance) keeps them from
+    /// falling; or a teammate's Lasso pulls them to the teammate's tile (owner, 2026-11-17).
     /// Every table checks the card, the hole and the teammate's tile for itself.
     /// </summary>
     public sealed class TrapFloorSaveFromFallCommand : ITabletopCommand
@@ -380,7 +380,7 @@ namespace ConsoleCards.Games.TrapFloor
         {
             if (!Ready || match == null || command == null) return TrapFloorLaunchResult.Failure(TrapFloorLaunchError.Unavailable);
             // Step 5 (owner, 2026-11-17): Insurance keeps a player a Spring or Crane drops onto a hole (this table's cards).
-            // The Strategist's Shield saves only from a collapse.
+            // SHIELD-ALL (owner, 2026-11-26): Shield saves no one from a fall; only Insurance does.
             ability.FallSaver = player => SaveCardOf(match, player, false);
             try
             {
