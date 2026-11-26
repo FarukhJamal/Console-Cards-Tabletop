@@ -2877,7 +2877,7 @@ namespace ConsoleCards.Presentation.Composition
                 return host.trapFloorObjectiveState.TryGetClaim(
                         floorCard.ObjectId,
                         out TrapFloorCollectedKeyState claim)
-                    ? $"{description}\nKEY STATUS: taken first by {FormatPlayerName(claim.ClaimedByPlayerId)}; every player may take it once."
+                    ? $"{description}\nKEY STATUS: taken by {FormatPlayerName(claim.ClaimedByPlayerId)}." // KEYS-LEAVE: one player takes each Key
                     : $"{description}\nKEY STATUS: UNCLAIMED — use Claim Key to collect it.";
             }
 
@@ -3155,8 +3155,13 @@ namespace ConsoleCards.Presentation.Composition
                         ? "End Turn applies it if you leave it."
                         : "Reminders: End Turn does not apply it. Choose Apply (here, in the turn menu or the tile's menu).")
                 : revealedFloor.Content.DisplayText;
+            // SHIELD-ALL (owner, 2026-11-26): a trap with no assisted effect still waits for a Reaction (Shield stops any
+            // trap), so the same offer shows for it.
+            bool trapWaitsForReaction = !result.TrapSuppressed && !trapWaiting
+                && revealedFloor.Content.Category == TrapFloorFloorContentCategory.Trap
+                && IsTrapFloorTrapPending(revealedId);
             // Owner, 2026-10-20: a player holding a Reaction that can stop this trap is offered it right here.
-            int usableReactions = trapWaiting ? CountUsableReactions(host.trapFloorTurnState.ActivePlayerId) : 0;
+            int usableReactions = trapWaiting || trapWaitsForReaction ? CountUsableReactions(host.trapFloorTurnState.ActivePlayerId) : 0;
             if (usableReactions > 0)
             {
                 body = $"{revealedFloor.Content.DisplayText}\n\nYou hold {usableReactions} Reaction"
@@ -3194,7 +3199,9 @@ namespace ConsoleCards.Presentation.Composition
                 revealedFloor.Content.DisplayText,
                 body,
                 "OK",
-                CloseFocusedSearchReveal);
+                CloseFocusedSearchReveal,
+                usableReactions > 0 ? "Use a Reaction…" : null, // SHIELD-ALL: the same offer as a waiting trap's popup
+                usableReactions > 0 ? (Action)(() => ShowReactionOffer(host.trapFloorTurnState.ActivePlayerId)) : null);
             ShowRevealFor(host.trapFloorTurnState != null ? host.trapFloorTurnState.ActivePlayerId : PlayerId.Empty, model);
         }
 
