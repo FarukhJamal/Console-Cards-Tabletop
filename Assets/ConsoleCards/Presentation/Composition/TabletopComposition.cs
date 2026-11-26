@@ -1085,6 +1085,8 @@ namespace ConsoleCards.Presentation.Composition
                 }
 
                 UpdateHotSeat();
+                // SOFTLOCK-1: a move whose final state never came (not while a piece is in this player's hand: that move is live)
+                if (moveCoordinator == null || moveCoordinator.ActiveView == null) SessionService.ExpireStaleUndoTransaction();
             }
 
             online?.Tick(); // MP-2: the room's messages and the shared table

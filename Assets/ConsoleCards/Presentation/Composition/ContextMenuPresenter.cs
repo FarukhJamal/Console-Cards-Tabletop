@@ -1363,6 +1363,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            host.RollFloorDiePartner(targetDieId); // COLLAPSE-ROLL
             CloseContextMenu();
         }
 

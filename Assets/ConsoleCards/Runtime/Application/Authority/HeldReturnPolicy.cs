@@ -95,7 +95,7 @@ namespace ConsoleCards.Application.Authority
             if (match == null || sender.IsEmpty || commandId.IsEmpty || !match.ContainsObject(objectId)) return false;
             TabletopObjectState piece = match.GetObject(objectId);
             PhysicalObjectState now = piece.PhysicalState;
-            if (piece.Kind == TabletopObjectKind.Die || now == null || now.Mode != PhysicalObjectMode.Dynamic
+            if (now == null || now.Mode != PhysicalObjectMode.Dynamic
                 || now.ControllingPlayerId != sender || !piece.ContainerId.IsEmpty)
                 return false;
             // QA 2026-11-14: the last accepted place of a moving piece can be in the air (a release checkpoint), where
@@ -104,12 +104,16 @@ namespace ConsoleCards.Application.Authority
             // stop where it was last accepted.
             PhysicalObjectState rest = null;
             bool knownRest = ReferenceEquals(match, rememberedFor) && restBeforeHold.TryGetValue(objectId, out rest) && rest != null;
+            // DICE-SETTLE (owner, 2026-11-25: "the dice then floated"): a refused die was left out, so the host kept it moving
+            // at its last (mid-air) checkpoint and sent that back. It now stops too, as an unresolved roll: its face is not
+            // taken from where it was put, and it is thrown again.
+            PhysicalObjectMode stopMode = piece.Kind == TabletopObjectKind.Die ? PhysicalObjectMode.SleepingUnresolved : PhysicalObjectMode.Sleeping;
             settle = new CommitPhysicalObjectCommand(
                 new CommandContext(commandId, match.Id, sender, match.Revision),
                 objectId,
                 knownRest
-                    ? new PhysicalObjectState(rest.Position, rest.Rotation, default, default, PhysicalObjectMode.Sleeping, sender)
-                    : new PhysicalObjectState(now.Position, now.Rotation, default, default, PhysicalObjectMode.Sleeping, sender),
+                    ? new PhysicalObjectState(rest.Position, rest.Rotation, default, default, stopMode, sender)
+                    : new PhysicalObjectState(now.Position, now.Rotation, default, default, stopMode, sender),
                 piece.PhysicalRevision);
             return true;
         }

@@ -820,6 +820,23 @@ namespace ConsoleCards.Presentation.Composition
             RefreshUndoUi();
         }
 
+        // SOFTLOCK-1 (owner, 2026-11-25: after the collapse roll "input stopped", Undo was unavailable and the floor "must
+        // collapse first" forever): a move in progress is ended only by its final settle, and a die or piece the host
+        // refused or corrected never sends one. While the flag stays up Undo is off and the game's checks (the collapse
+        // watcher, landings, the Buy Phase, ability discards) wait. A move with no news for this long is taken as over.
+        private const float StaleTransactionSeconds = 8f;
+        private float undoTransactionSince;
+        private AuthoritativeActionKind undoTransactionKind;
+
+        internal void ExpireStaleUndoTransaction()
+        {
+            if (!host.undoTransactionInProgress || Time.unscaledTime - undoTransactionSince < StaleTransactionSeconds) return;
+            host.undoTransactionInProgress = false;
+            host.undoHistory.ReplaceCurrentState(CaptureUndoSnapshot()); // as a cancelled move: the table as it is now
+            RefreshUndoUi();
+            Debug.LogWarning($"[Undo] A move in progress ({undoTransactionKind}) got no final state for {StaleTransactionSeconds:0} s (refused or lost): it is treated as over, so Undo and the game's checks go on.");
+        }
+
         internal void StopUndoTrackingCurrentMatch()
         {
             if (host.undoTrackedMatch != null)
@@ -867,6 +884,8 @@ namespace ConsoleCards.Presentation.Composition
             {
                 case AuthoritativeActionRecordMode.Intermediate:
                     host.undoTransactionInProgress = true;
+                    undoTransactionSince = Time.unscaledTime; // SOFTLOCK-1
+                    undoTransactionKind = acceptance.Kind;
                     RefreshUndoUi();
                     break;
                 case AuthoritativeActionRecordMode.Transaction:

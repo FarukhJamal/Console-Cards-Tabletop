@@ -280,6 +280,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             bool flicked = view.PhysicalObject.Flick(velocity);
+            if (flicked && view is DieView) RollFloorDiePartner(view.ObjectId); // COLLAPSE-ROLL
             StopFlickChargeSound(flicked, strength); // POL-5: a snap on release
             if (!flicked) ShowMessage("Flick rejected.");
         }

@@ -1031,13 +1031,41 @@ namespace ConsoleCards.Presentation.Composition
         internal int RollSelectedDice()
         {
             int rolled = 0;
+            int floorDiceRolled = 0;
+            TabletopObjectId floorDie = TabletopObjectId.Empty;
             for (int i = 0; i < toolSelection.Count; i++)
             {
-                if (toolSelection[i].View is DieView die && die.PhysicalObject != null && die.PhysicalObject.Roll()) rolled++;
+                if (toolSelection[i].View is DieView die && die.PhysicalObject != null && die.PhysicalObject.Roll())
+                {
+                    rolled++;
+                    if (IsFloorCollapseDie(die.ObjectId))
+                    {
+                        floorDiceRolled++;
+                        floorDie = die.ObjectId;
+                    }
+                }
             }
 
+            if (floorDiceRolled == 1) RollFloorDiePartner(floorDie); // COLLAPSE-ROLL: one of the pair was selected
             return rolled;
         }
+
+        // COLLAPSE-ROLL (owner, 2026-11-25: R did not count as the collapse roll; only both dice selected + Roll worked):
+        // while the floor waits for its collapse roll, rolling one floor die rolls the other too, so R, the menu's Roll and
+        // a flick all make the same two-dice roll on this computer.
+        internal void RollFloorDiePartner(TabletopObjectId rolledId)
+        {
+            if (trapFloorTemplate == null || !TrapFloorGame.WaitsForFloorDiceRoll || !IsFloorCollapseDie(rolledId)) return;
+            TabletopObjectId partner = rolledId == trapFloorTemplate.FloorfallXAxisDieId
+                ? trapFloorTemplate.FloorfallYAxisDieId
+                : trapFloorTemplate.FloorfallXAxisDieId;
+            if (Registry.TryGetDieView(partner, out DieView other) && other.PhysicalObject != null && other.PhysicalObject.Roll())
+                Debug.Log("[Dice] The other floor die was rolled with it (collapse roll).");
+        }
+
+        private bool IsFloorCollapseDie(TabletopObjectId id) =>
+            trapFloorTemplate != null && !id.IsEmpty
+            && (id == trapFloorTemplate.FloorfallXAxisDieId || id == trapFloorTemplate.FloorfallYAxisDieId);
 
         private void RollOrShuffleByKey()
         {
@@ -1054,6 +1082,7 @@ namespace ConsoleCards.Presentation.Composition
             if (hoverView is DieView hoveredDie && hoverPileId.IsEmpty)
             {
                 if (hoveredDie.PhysicalObject == null || !hoveredDie.PhysicalObject.Roll()) ShowMessage("That die can't be rolled now.");
+                else RollFloorDiePartner(hoveredDie.ObjectId); // COLLAPSE-ROLL
                 return;
             }
 

@@ -977,6 +977,12 @@ namespace ConsoleCards.Presentation.Composition
         // reminds). A collapse waiting for its roll after an Undo or a rebuild is picked up again too. Watching costs a
         // few field checks per frame; it never submits a command until the dice were thrown.
         private bool collapseWatching;
+
+        // COLLAPSE-ROLL: the floor waits for a throw of its two dice (watched at a floor turn, or a collapse asked for).
+        internal bool WaitsForFloorDiceRoll =>
+            collapseWatching || host.physicalFloorCollapsePending
+            || (!PlayAssist.IsFree && !floorTurnCollapseDone && host.trapFloorTurnState != null
+                && host.trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn && !host.trapFloorTurnState.IsCurrentFloorFailed);
         private bool floorTurnCollapseDone;
 
         /// <summary>P7: why the last End Floor Turn was refused here (null when it was not), for the host's answer to a guest.</summary>
