@@ -553,6 +553,15 @@ namespace ConsoleCards.Presentation.Composition
                 case TrapFloorActivityKind.AllPlayersEliminated:
                     cameraController?.Kick(set.EliminatedKick, set.KickSeconds * 1.4f);
                     break;
+                case TrapFloorActivityKind.UsedShield:
+                    // SHIELD-VFX (owner, 2026-11-26): the blocked Trap gets a Shield effect on its tile, on every computer.
+                    if (hasTile)
+                    {
+                        boardFeedback.Flash(tile, ShieldEffectColour);
+                        boardFeedback.Burst(tile, ShieldEffectColour);
+                    }
+
+                    break;
             }
         }
 
@@ -561,6 +570,7 @@ namespace ConsoleCards.Presentation.Composition
         // pawn when there is one target. (2026-10-20: the green outline replaces a tint nobody could see.)
         private readonly List<Vector3> boardFeedbackNeutralized = new List<Vector3>(8);
         private static readonly Color NeutralizedTrapColour = new Color(0.32f, 0.78f, 0.52f, 0.9f);
+        private static readonly Color ShieldEffectColour = new Color(0.36f, 0.78f, 1f, 1f); // SHIELD-VFX
 
         // AUTH-5: the game's public state as one number for the online check (0 for a table with no game state).
         internal ulong GameStateHash() => trapFloorTemplate != null ? TrapFloorGame.PublicStateHash() : 0UL;

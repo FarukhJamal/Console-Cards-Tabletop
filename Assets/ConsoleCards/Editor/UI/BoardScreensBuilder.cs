@@ -58,7 +58,7 @@ namespace ConsoleCards.Editor.UI
             if (Rebuild("FE_Profile", 1, BuildProfileBoard)) built++; // PROFILE-2: board 19
             if (Rebuild("FE_MainMenu", 3, BuildHome)) built++; // 2: BRAND-1, the logo as the title; 3: 540 x 270
             if (Rebuild("FE_Library", 1, BuildLibrary)) built++;
-            if (Rebuild("FE_Details", 3, BuildSheet)) built++; // 2: COVER-1, CHANGE PICTURE; 3: TILES-1, Tiles are placed
+            if (Rebuild("FE_Details", 5, BuildSheet)) built++; // 2: COVER-1, CHANGE PICTURE; 3: TILES-1, Tiles are placed; 5: HOTSEAT-1, Hot seat in the Players row
             if (Rebuild("FE_Lobby", 1, BuildLobbyBoard)) built++; // board 2b (BoardScreensBuilder.Online.cs)
             if (Rebuild("FE_Room", 1, BuildRoomBoard)) built++;
             BoardBackground();

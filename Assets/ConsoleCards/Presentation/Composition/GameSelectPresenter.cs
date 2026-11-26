@@ -124,6 +124,7 @@ namespace ConsoleCards.Presentation.Composition
                     CycleWinMode = CycleGameWinMode,
                     CycleTurns = CycleGameTurns,
                     CycleTiles = CycleGameTiles,
+                    CycleHotSeat = CycleGameHotSeat, // HOTSEAT-1
                     CycleDeck = CycleGameDeck,
                     OpenProfile = () => OpenFromGameSelect(host.ProfilePanel.OpenProfilePanel),
                     OpenCardArt = () => OpenFromGameSelect(host.OpenCardArtPanel),
@@ -277,6 +278,9 @@ namespace ConsoleCards.Presentation.Composition
             model.PlayerColors = colors;
             model.PlayerColorNames = colorNames;
             model.CanChangeColours = count > 0 && order.Length > 1 && !inRoom;
+            // HOTSEAT-1 (owner, 2026-11-26): on one computer the screen can follow whoever must act (buyer, then turn player).
+            model.ShowHotSeat = count > 1 && !inRoom;
+            model.HotSeatText = host.hotSeatMode ? "On" : "Off";
             model.Online = host.Online.BuildScreenModel();
             if (inRoom)
             {
@@ -801,6 +805,15 @@ namespace ConsoleCards.Presentation.Composition
             bool byPlayers = !ChosenTilesByPlayers(entry);
             gameSelectTiles = byPlayers ? 1 : 0;
             ShowGameSelect(TrapFloorCartridge.TilesHint(byPlayers), entries);
+        }
+
+        // HOTSEAT-1 (owner, 2026-11-26): the table's Hot seat switch, chosen before the game starts.
+        internal void CycleGameHotSeat(int step)
+        {
+            host.hotSeatMode = !host.hotSeatMode;
+            ShowGameSelect(host.hotSeatMode
+                ? "Hot seat on: the screen passes to each player when they must act."
+                : "Hot seat off: this screen keeps its seat.");
         }
 
         internal void CycleGameTurns(int step)

@@ -2483,6 +2483,181 @@ namespace ConsoleCards.Presentation.Composition
             return true;
         }
 
+        // OUT-PAWN-OFF (owner, 2026-11-26: "Eliminated pawn: in Full the game moves it off the board if safe; otherwise the host or
+        // the pawn's owner removes it"): in Full, once a player is out for this floor (eliminated, not escaped: an escape has its
+        // own move) their pawn is put to rest beside their Console, on the spot a bought Ability uses. Level-triggered from the
+        // table's own state, so it covers every way of being eliminated and every computer; it is done only by the computer that
+        // plays that seat (offline: this one; online: the seat's own computer, or the host for a seat nobody else plays), so it
+        // happens once and the command replicates like any pawn move (TrapFloorHostMoveRules: an out player's pawn may go off
+        // the floor). Not in Free or Reminders; not once the floor has ended (the next floor is dealt fresh, pawns start over).
+        // No per-frame allocation: the sets only grow when a player goes out.
+        private const float OutPawnOffDelaySeconds = 1f; // the elimination shows first; any hop or settle has ended
+        private readonly HashSet<PlayerId> outPawnOffDone = new HashSet<PlayerId>();
+        private readonly Dictionary<PlayerId, float> outPawnOffSeen = new Dictionary<PlayerId, float>();
+        private TrapFloorTemplateDefinition outPawnOffFloor;
+
+        private void TickOutPawnsOffBoard()
+        {
+            if (PlayAssist.Level != PlayAssistLevel.Full
+                || host.trapFloorTemplate == null
+                || host.trapFloorTurnState == null
+                || host.matchState == null
+                || host.undoTransactionInProgress
+                || host.undoBatchActive
+                || host.rebuildingFromUndo
+                || host.landingCheckPending
+                || (host.HasOnline && (host.Online.TableIsStale || host.Online.ApplyingTable)))
+            {
+                return;
+            }
+
+            if (!ReferenceEquals(outPawnOffFloor, host.trapFloorTemplate))
+            {
+                outPawnOffFloor = host.trapFloorTemplate; // a new floor: nothing is done or seen yet
+                outPawnOffDone.Clear();
+                outPawnOffSeen.Clear();
+            }
+
+            IReadOnlyList<PlayerId> order = host.trapFloorTurnState.PlayerOrder;
+            for (int i = 0; i < order.Count; i++)
+            {
+                PlayerId player = order[i];
+                bool isOut = host.trapFloorTurnState.GetPlayerState(player) == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound
+                    && !(host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.IsPlayerEscaped(player));
+                if (!isOut)
+                {
+                    outPawnOffSeen.Remove(player); // back in (Undo): a new elimination is a new move
+                    outPawnOffDone.Remove(player);
+                    continue;
+                }
+
+                if (outPawnOffDone.Contains(player)
+                    || IsFloorEnded()
+                    || !host.IsPlayerOnThisComputer(player)
+                    || host.IsActingForAnotherComputer)
+                {
+                    continue;
+                }
+
+                if (!outPawnOffSeen.TryGetValue(player, out float seenAt))
+                {
+                    outPawnOffSeen[player] = Time.unscaledTime;
+                    continue;
+                }
+
+                if (Time.unscaledTime - seenAt < OutPawnOffDelaySeconds) continue;
+                if (MoveOutPawnBesideConsole(player)) outPawnOffDone.Add(player); // false: held now, looked at again next frame
+            }
+        }
+
+        // True when this player's pawn is dealt with for this floor (moved, already there, or not safe to move: it stays and
+        // the host or its owner removes it by hand); false while somebody holds it (tried again once it is let go).
+        private bool MoveOutPawnBesideConsole(PlayerId player)
+        {
+            if (!TryGetTrapFloorPlayerSetup(player, out TrapFloorPlayerSetupDefinition setup)
+                || !host.matchState.Pawns.TryGetValue(setup.PawnId, out PawnState pawn))
+            {
+                return true;
+            }
+
+            PawnView pawnView = null;
+            for (int i = 0; i < host.Registry.pawnViews.Count; i++)
+            {
+                if (host.Registry.pawnViews[i] != null && host.Registry.pawnViews[i].IsBound && host.Registry.pawnViews[i].ObjectId == pawn.BaseState.Id)
+                {
+                    pawnView = host.Registry.pawnViews[i];
+                    break;
+                }
+            }
+
+            PhysicalObjectState physical = pawn.BaseState.PhysicalState;
+            if ((physical != null && physical.Mode == PhysicalObjectMode.Held)
+                || (pawnView != null && pawnView.PhysicalObject != null && pawnView.PhysicalObject.IsHeld))
+            {
+                return false; // held by someone: not safe now
+            }
+
+            if (!pawn.BaseState.ContainerId.IsEmpty || pawn.BaseState.IsUserLocked) return true; // in a container, or locked: it stays
+
+            TabletopPose consolePose = setup.AbilityOverflowPose;
+            TableCoordinate now = PawnTablePosition(pawn);
+            const double Near = 2.5d; // as TrapFloorTakePrizeUseCase.FreeOverflowPose: already beside the Console
+            if (((now.X - consolePose.Position.X) * (now.X - consolePose.Position.X))
+                + ((now.Y - consolePose.Position.Y) * (now.Y - consolePose.Position.Y)) <= Near * Near)
+            {
+                return true;
+            }
+
+            // A free spot beside the Console: the same row of spots a bought Ability uses, skipping what already lies there.
+            List<TableCoordinate> loose = new List<TableCoordinate>();
+            foreach (CardInstanceState lying in host.matchState.Cards.Values)
+            {
+                if (lying.BaseState.ContainerId.IsEmpty) loose.Add(lying.BaseState.Pose.Position);
+            }
+
+            foreach (PawnState other in host.matchState.Pawns.Values)
+            {
+                if (other.BaseState.Id != pawn.BaseState.Id && other.BaseState.ContainerId.IsEmpty) loose.Add(PawnTablePosition(other));
+            }
+
+            TabletopPose spot = TrapFloorTakePrizeUseCase.NextFreeOverflowPose(consolePose, loose);
+            TabletopPose currentPose = pawn.BaseState.Pose;
+            TabletopPose targetPose = new TabletopPose(spot.Position, currentPose.RotationDegrees, currentPose.Layer, currentPose.LocalOrder);
+
+            Transform hopVisual = pawnView != null ? pawnView.transform.Find("VisualRoot") : null;
+            Vector3 hopStart = hopVisual != null
+                ? hopVisual.position
+                : pawnView != null ? pawnView.transform.position : Vector3.zero;
+            TabletopTransformSnapshot hopRootStart = pawnView != null
+                ? host.presentationTransitions.Capture(pawnView.transform)
+                : default;
+            bool moved = false;
+            // Through the authority, never a transform write: a physical pawn by a physical commit resolved on the table
+            // surface (put down at rest, one logical move, one revision), otherwise by MoveObject.
+            if (physical != null
+                && host.physicalAuthority != null
+                && pawnView != null
+                && pawnView.PhysicalObject != null)
+            {
+                if (host.physicalAuthority.Surfaces.TryResolveAuthoredLooseObject(
+                        targetPose,
+                        player,
+                        pawnView.PhysicalObject.PhysicalCollider,
+                        pawn.BaseState.IsUserLocked,
+                        out PhysicalObjectState placed))
+                {
+                    PhysicalObjectState resting = pawnView.PhysicalObject.RestingOnTable(placed);
+                    moved = host.TableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(
+                        new CommitPhysicalObjectCommand(
+                            host.CreateCommandContext(player),
+                            pawn.BaseState.Id,
+                            resting,
+                            pawn.BaseState.PhysicalRevision,
+                            null,
+                            AuthoritativeActionRecordMode.Transaction,
+                            targetPose)).Succeeded; // the pose travels inside the command (PHY-3), as every game move
+                }
+            }
+            else
+            {
+                moved = host.TableAuthority.Submit<MoveObjectCommand, MoveObjectResult>(
+                    new MoveObjectCommand(host.CreateCommandContext(player), pawn.BaseState.Id, targetPose)).Succeeded;
+            }
+
+            if (!moved)
+            {
+                // Not safe after all (refused): the pawn stays; the host or its owner removes it by hand. One line, once.
+                Debug.Log($"[Floor] OUT-PAWN-OFF: the move of {FormatPlayerName(player)}'s pawn beside their Console was refused; it stays.");
+                return true;
+            }
+
+            pawnView?.ApplyAcceptedState();
+            landingPawnTiles[pawn.BaseState.Id] = null; // the pawn left the grid: no landing to check
+            if (!IsSpringHopRunning(hopVisual)) StartPawnHop(pawnView, hopVisual, hopStart, hopRootStart);
+            CollectTakenPrizesOffPawns(); // a prize the pawn stood on goes by its taker's Console now
+            return true;
+        }
+
         // F4: a pawn moved for the player hops from where it was to where it now stands. A physical pawn hops its
         // VisualRoot child only (the body is already placed); otherwise the whole pawn is animated by the
         // Presentation transitions. Never changes game state.
@@ -7386,6 +7561,7 @@ namespace ConsoleCards.Presentation.Composition
             UpdateTurnOrderRule(); // IMP-1
             CompletePendingLandingFlip();
             ShowFloorEndReachedElsewhere(); // FLOOREND-GUEST
+            TickOutPawnsOffBoard(); // OUT-PAWN-OFF
             DiscardUsedAbility();
             TickBuyPhase(); // rules v1.151126: the deal of each Buy Phase (offline, or the host)
             GiveChosenAvatarsTheirAbilities(); // D2/D3

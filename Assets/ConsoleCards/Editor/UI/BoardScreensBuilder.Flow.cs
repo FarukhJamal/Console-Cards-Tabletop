@@ -372,6 +372,7 @@ namespace ConsoleCards.Editor.UI
             AddBox(players, TealFill, Cyan);
             TextAt(players, "Title", 14, 0, 80, 58, bold, 14, Words, TextAnchor.MiddleLeft, "Players");
             TextAt(players, "Hint", 78, 0, 200, 58, medium, 13, Muted, TextAnchor.MiddleLeft, "on this computer");
+            SmallButton(players, "HotSeat", 286, 13, 156, 32, "HOT SEAT: OFF", Edge, Cyan); // HOTSEAT-1 (owner, 2026-11-26): one click
             SmallButton(players, "Minus", 456, 13, 32, 32, "−", Edge, Cyan);
             TextAt(players, "Count", 494, 13, 40, 32, bold, 18, Words, TextAnchor.MiddleCenter, "4");
             SmallButton(players, "Plus", 540, 13, 32, 32, "+", Edge, Cyan);

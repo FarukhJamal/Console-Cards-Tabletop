@@ -527,6 +527,7 @@ namespace ConsoleCards.Presentation.Composition
             List<TableCoordinate> spots = new List<TableCoordinate>(abilityOffer.Count);
             bool placed = host.TryAbilityDealSpots(buyer, abilityOffer.Count, spots);
             var starts = host.CaptureCardTransforms(new List<TabletopObjectId>(abilityOffer)); // only the dealt cards slide
+            List<TabletopObjectId> notDealt = null; // DRAW3-SYNC (2026-11-26): ids of the pick that did not land (event-time, made only on a refusal)
             bool batch = !host.undoBatchActive;
             if (batch) host.SessionService.BeginUndoBatch();
             try
@@ -534,7 +535,12 @@ namespace ConsoleCards.Presentation.Composition
                 for (int i = 0; i < abilityOffer.Count; i++)
                 {
                     TabletopObjectId cardId = abilityOffer[i];
-                    if (!deck.Contains(cardId)) continue;
+                    if (!deck.Contains(cardId))
+                    {
+                        (notDealt ?? (notDealt = new List<TabletopObjectId>(AbilityOfferSize))).Add(cardId); // DRAW3-SYNC: taken before this deal
+                        continue;
+                    }
+
                     TableCoordinate at = placed
                         ? spots[i]
                         : new TableCoordinate(
@@ -543,7 +549,12 @@ namespace ConsoleCards.Presentation.Composition
                     TabletopPose pose = new TabletopPose(at, basePose.RotationDegrees, basePose.Layer, basePose.LocalOrder + i);
                     TransferCardResult moved = host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(
                         new TransferCardCommand(host.CreateCommandContext(buyer), cardId, deck.Id, ContainerId.Empty, pose));
-                    if (!moved.Succeeded) continue;
+                    if (!moved.Succeeded)
+                    {
+                        (notDealt ?? (notDealt = new List<TabletopObjectId>(AbilityOfferSize))).Add(cardId); // DRAW3-SYNC: refused
+                        continue;
+                    }
+
                     host.TableAuthority.Submit<FlipCardCommand, FlipCardResult>(new FlipCardCommand(host.CreateCommandContext(buyer), cardId, CardFace.FaceUp));
                     // Full keeps the draw where it was dealt (locked); Reminders and Free leave the cards in the players' hands
                     // to handle (owner, 2026-11-12: "players retain control over physical card handling").
@@ -556,6 +567,14 @@ namespace ConsoleCards.Presentation.Composition
             finally
             {
                 if (batch) host.SessionService.EndUndoBatch();
+            }
+
+            // DRAW3-SYNC (2026-11-26, online: "Draw 3 showed only 2 choices"): a card that was refused (or already taken) is not
+            // part of this buyer's draw; the panel lists only what landed. Counts only: never a hidden card's name.
+            if (notDealt != null)
+            {
+                for (int i = 0; i < notDealt.Count; i++) abilityOffer.Remove(notDealt[i]);
+                UnityEngine.Debug.Log($"[Abilities] DRAW3-SYNC: {notDealt.Count} of the draw's cards could not be dealt (taken or refused); {abilityOffer.Count} are listed.");
             }
 
             host.ViewSync.SyncContainer(deck.Id);
@@ -601,10 +620,20 @@ namespace ConsoleCards.Presentation.Composition
             if (!IsAbilityOfferTurn() || !TryGetAbilityDeck(out ContainerState deck)) return;
             List<TabletopObjectId> lying = FindDrawLyingOut();
             // Rules v1.151126: online, every player's Buy Phase draw lies out at once; only this computer's own counts here.
-            if (IsBuyPhase && host.IsOnlineTable) lying.RemoveAll(cardId => !abilityOffer.Contains(cardId));
+            // DRAW3-SYNC (2026-11-26): this buyer's own draw is what lies beside THEIR Console (or what this computer dealt), not
+            // only the ids this computer picked from its deck: the panel lists the cards that really landed (a card another
+            // computer's step moved, or one this computer's pick missed, is listed; another buyer's is not).
+            bool online = IsBuyPhase && host.IsOnlineTable;
+            if (online)
+            {
+                TryGetTrapFloorPlayerSetup(abilityOfferPlayer, out TrapFloorPlayerSetupDefinition buyerSetup);
+                lying.RemoveAll(cardId => !IsDrawBesideBuyer(cardId, buyerSetup));
+            }
+
             if (lying.Count > 0)
             {
                 foreach (TabletopObjectId cardId in lying) dealtOffer.Add(cardId);
+                if (online) RebuildOfferFromLanded(deck, lying);
                 return;
             }
 
@@ -616,6 +645,60 @@ namespace ConsoleCards.Presentation.Composition
             abilityOfferTurnState = null;
             abilityOfferRound = -1;
             abilityOfferPlayer = PlayerId.Empty;
+        }
+
+        // DRAW3-SYNC (2026-11-26): a card of the draw lying out is this buyer's when this computer dealt it, or when it lies
+        // nearer to this buyer's Console than to any other player's (the deal puts each draw beside its buyer's Console).
+        // Event-time only.
+        private bool IsDrawBesideBuyer(TabletopObjectId cardId, TrapFloorPlayerSetupDefinition buyerSetup)
+        {
+            if (dealtOffer.Contains(cardId)) return true;
+            if (buyerSetup == null || host.trapFloorTemplate == null
+                || !host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card))
+            {
+                return false;
+            }
+
+            TableCoordinate at = card.BaseState.Pose.Position;
+            double nearest = double.MaxValue;
+            double own = double.MaxValue;
+            IReadOnlyList<TrapFloorPlayerSetupDefinition> players = host.trapFloorTemplate.Players;
+            for (int i = 0; i < players.Count; i++)
+            {
+                TableCoordinate console = players[i].AbilityOverflowPose.Position;
+                double dx = at.X - console.X;
+                double dy = at.Y - console.Y;
+                double distance = (dx * dx) + (dy * dy);
+                if (distance < nearest) nearest = distance;
+                if (players[i].PawnId == buyerSetup.PawnId) own = distance;
+            }
+
+            return own <= nearest + 1e-6d; // a tie (consoles not placed apart) keeps the old "every draw lying out" reading
+        }
+
+        // DRAW3-SYNC (2026-11-26): the draw this buyer's panel lists = what landed beside their Console. A pick still in the
+        // deck never landed; a pick lying out that is not this buyer's went to another buyer. A pick that left the deck for a
+        // Console slot or the buyer (bought) stays, so DRAW3-ONCE still knows the draw was made. Event-time only.
+        private void RebuildOfferFromLanded(ContainerState deck, List<TabletopObjectId> landed)
+        {
+            int listedBefore = abilityOffer.Count;
+            for (int i = abilityOffer.Count - 1; i >= 0; i--)
+            {
+                TabletopObjectId id = abilityOffer[i];
+                bool lyingElsewhere = !landed.Contains(id)
+                    && host.matchState.Cards.TryGetValue(id, out CardInstanceState card)
+                    && card.BaseState.ContainerId.IsEmpty
+                    && card.BaseState.OwnerPlayerId.IsEmpty;
+                if (deck.Contains(id) || lyingElsewhere) abilityOffer.RemoveAt(i);
+            }
+
+            for (int i = 0; i < landed.Count; i++)
+            {
+                if (!abilityOffer.Contains(landed[i])) abilityOffer.Add(landed[i]);
+            }
+
+            if (abilityOffer.Count != listedBefore)
+                UnityEngine.Debug.Log($"[Abilities] DRAW3-SYNC: the draw's list now follows the table ({listedBefore} -> {abilityOffer.Count} cards).");
         }
 
         // Takes a draw that lies out as this turn's (so a reconnected player can still buy from it or End Buying, and
@@ -876,6 +959,7 @@ namespace ConsoleCards.Presentation.Composition
             yield return new UnityEngine.WaitForSecondsRealtime(UnityEngine.Mathf.Max(host.CardSlidesDoneIn(), AbilityDealSlideSeconds) + 0.1f);
             bool turn = IsAbilityOfferTurn();
             bool deckFound = TryGetAbilityDeck(out ContainerState deck);
+            if (turn && deckFound && IsBuyPhase && host.IsOnlineTable) SyncDrawWithTable(); // DRAW3-SYNC: list what really landed
             int left = deckFound ? CountOfferStillInDeck(deck) : 0;
             bool paying = IsPaymentBlocking();
             if (turn && !paying && left > 0) ShowAbilityOffer(deck);

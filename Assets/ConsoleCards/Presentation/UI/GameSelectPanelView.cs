@@ -28,6 +28,9 @@ namespace ConsoleCards.Presentation.UI
         // TILES-1: "Tiles are placed" (At random / By the players), Trap Floor only.
         public bool ShowTiles;
         public string TilesText = string.Empty;
+        // HOTSEAT-1 (owner, 2026-11-26): Hot seat on/off for a game on this computer (not in an online room).
+        public bool ShowHotSeat;
+        public string HotSeatText = string.Empty;
         public string Rules = string.Empty;
         public string Deck = string.Empty;
         public bool CanChangeDeck;
@@ -223,6 +226,7 @@ namespace ConsoleCards.Presentation.UI
         public Action<int> CycleWinMode;
         public Action<int> CycleTurns;
         public Action<int> CycleTiles;
+        public Action<int> CycleHotSeat; // HOTSEAT-1
         public Action<int> CycleDeck;
         public Action OpenProfile;
         public Action OpenCardArt;

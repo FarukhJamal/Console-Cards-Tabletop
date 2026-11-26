@@ -90,6 +90,7 @@ namespace ConsoleCards.Presentation.UI
             On("Pages/Details/Setup/Turns/Next", () => actions?.CycleTurns?.Invoke(1));
             On("Pages/Details/Setup/Tiles/Previous", () => actions?.CycleTiles?.Invoke(-1));
             On("Pages/Details/Setup/Tiles/Next", () => actions?.CycleTiles?.Invoke(1));
+            On("Pages/Details/Setup/Players/HotSeat", () => actions?.CycleHotSeat?.Invoke(1)); // HOTSEAT-1
             On("Pages/Details/Setup/Deck/Previous", () => actions?.CycleDeck?.Invoke(-1));
             On("Pages/Details/Setup/Deck/Next", () => actions?.CycleDeck?.Invoke(1));
             On("Pages/Details/Setup/More", () =>
@@ -360,6 +361,8 @@ namespace ConsoleCards.Presentation.UI
             SheetRow(setup + "Difficulty", model.ShowMode, model.ModeName, model.CanChangeMode);
             SheetRow(setup + "WinMode", model.ShowWinMode, model.WinModeText, model.ShowWinMode);
             SheetRow(setup + "Tiles", model.ShowTiles, model.TilesText, model.ShowTiles); // TILES-1
+            SetActive(setup + "Players/HotSeat", model.ShowHotSeat); // HOTSEAT-1
+            if (model.ShowHotSeat) SetText(setup + "Players/HotSeat/Label", "HOT SEAT: " + Upper(model.HotSeatText));
             Transform chevron = Find(setup + "More/Chevron");
             if (chevron != null) chevron.localEulerAngles = new Vector3(0f, 0f, moreOptionsOpen ? -90f : 0f);
             SheetRow(setup + "Turns", moreOptionsOpen && model.ShowTurns, model.TurnsText, model.ShowTurns);
