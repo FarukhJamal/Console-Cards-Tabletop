@@ -1,0 +1,10 @@
+{
+    "name": "DatagramEncryptor",
+    "references": [
+        "Photon.Realtime"
+    ],
+    "optionalUnityReferences": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false
+}

@@ -23,7 +23,7 @@ MonoBehaviour:
     UseNameServer: 1
     FixedRegion: 
     Server: 
-    Port: 0
+    Port: 443
     ProxyServer: 
     Protocol: 0
     EnableProtocolFallback: 1
@@ -31,5 +31,5 @@ MonoBehaviour:
     EnableLobbyStatistics: 0
     NetworkLogging: 0
     ClientLogging: 0
-    encryptionMode: 0
+    encryptionMode: 13
     emptyRoomTtl: 0
