@@ -127,6 +127,7 @@ namespace ConsoleCards.Presentation.Composition
                 }
             }
 
+            createdView.RecordAuthoredScale(); // TINY-CARD: the card's own size, kept whatever a tween leaves on it
             host.Registry.cardVisualReferences.Add(createdVisualReferences);
             return createdView;
         }

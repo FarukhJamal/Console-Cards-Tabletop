@@ -248,8 +248,7 @@ namespace ConsoleCards.Presentation.Views.Containers
                 return;
             }
 
-            card.FaceUpVisualRoot.SetActive(false);
-            card.FaceDownVisualRoot.SetActive(true);
+            card.SetInHiddenHand(true); // HIDDEN-FACE: stays face down through later face refreshes
         }
 
         // Restores the accepted face of applied cards; when onlyDeparted is true, only of cards that have
@@ -274,6 +273,7 @@ namespace ConsoleCards.Presentation.Views.Containers
                     continue;
                 }
 
+                card.SetInHiddenHand(false); // HIDDEN-FACE: its accepted face again
                 card.ApplyAcceptedFacePresentation();
             }
         }

@@ -12,6 +12,10 @@ namespace ConsoleCards.Presentation.Views
 
         private CardInstanceState cardState;
         private bool holdFaceDown;
+        // HIDDEN-FACE (owner, 2026-11-27: "the other player's hand has two cards faced wrongly"): another player's hand
+        // showed its cards face down by switching the face roots once at layout; any later face refresh (a card state
+        // update, RefreshAcceptedCardFaces) put a face-up card's face back. Kept here, so every refresh keeps it down.
+        private bool inHiddenHand;
 
         public CardInstanceState CardState => cardState;
 
@@ -108,6 +112,17 @@ namespace ConsoleCards.Presentation.Views
             }
         }
 
+        /// <summary>HIDDEN-FACE: shown face down while it lies in another player's hand (true), or its accepted face (false).</summary>
+        internal void SetInHiddenHand(bool hidden)
+        {
+            if (inHiddenHand == hidden) return;
+            inHiddenHand = hidden;
+            if (IsBound && cardState != null && IsFacePresentationConfigured)
+            {
+                ApplyAcceptedFacePresentation();
+            }
+        }
+
         public void ApplyAcceptedFacePresentation()
         {
             if (!IsBound)
@@ -127,7 +142,7 @@ namespace ConsoleCards.Presentation.Views
 
             CardFace face = cardState.Face;
             ValidateSupportedFace(face);
-            if (holdFaceDown) face = CardFace.FaceDown;
+            if (holdFaceDown || inHiddenHand) face = CardFace.FaceDown;
 #if UNITY_EDITOR
             if (face == CardFace.FaceDown && EditorPeek != null && EditorPeek(cardState.BaseState.Id)) face = CardFace.FaceUp; // debug peek
 #endif
@@ -140,6 +155,7 @@ namespace ConsoleCards.Presentation.Views
         {
             cardState = null;
             holdFaceDown = false;
+            inHiddenHand = false;
         }
 
         protected override void OnAcceptedStateApplied()

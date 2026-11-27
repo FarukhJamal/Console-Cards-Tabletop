@@ -26,6 +26,13 @@ namespace ConsoleCards.Presentation.Views
         // changed while it is active and restored by every other pose path.
         private bool isOverlayPresentation;
         private Vector3 overlayBaseScale;
+        // TINY-CARD (owner, 2026-11-27: a hand card was very small again): the overlay took the View's scale at the moment
+        // it began as the card's own size. A hand reflow can stop a draw or return tween part way (HandView.LateUpdateTray
+        // stops it without finishing it), so a card caught mid-tween kept a tiny "own size" in the hand and on the table
+        // after it (ClearOverlayPresentation restores to it). The size the spawner gave the View is now recorded once and
+        // used instead.
+        private Vector3 authoredScale;
+        private bool authoredScaleKnown;
         private List<Renderer> overlayRenderers;
         private List<ShadowCastingMode> overlayShadowModes;
         private List<bool> overlayReceiveShadows;
@@ -178,6 +185,13 @@ namespace ConsoleCards.Presentation.Views
             transform.localScale = overlayBaseScale * scaleFactor;
         }
 
+        /// <summary>TINY-CARD: the View's own size, recorded once by the spawner after it sized the View.</summary>
+        internal void RecordAuthoredScale()
+        {
+            authoredScale = transform.localScale;
+            authoredScaleKnown = true;
+        }
+
         /// <summary>Restores scale, shadows and colliders changed by ApplyContainerOverlayPose.</summary>
         internal void ClearOverlayPresentation()
         {
@@ -247,7 +261,7 @@ namespace ConsoleCards.Presentation.Views
             }
 
             isOverlayPresentation = true;
-            overlayBaseScale = transform.localScale;
+            overlayBaseScale = authoredScaleKnown ? authoredScale : transform.localScale; // TINY-CARD
             GetComponentsInChildren(true, overlayRenderers);
             for (int i = 0; i < overlayRenderers.Count; i++)
             {
