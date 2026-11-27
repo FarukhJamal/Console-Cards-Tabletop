@@ -1071,7 +1071,28 @@ namespace ConsoleCards.Presentation.Composition
         {
             OnlineTablePacket packet = TableWire.Read(message, 9, message.Length - 9, true) as OnlineTablePacket;
             if (packet == null || packet.Setup == null) return;
-            if (!HasContentFor(packet)) return; // MP-4: dealt once the host's content is here
+            if (!HasContentFor(packet))
+            {
+                // TABLE-FIRST (owner, 2026-11-28: "all the players enter the game and see the common components; only the
+                // cards' faces are missing until they arrive"): the host's table is put here at once; the card pictures and
+                // names come with the content, and the table is dealt again from the host then. Only a table that cannot
+                // be built without the content (a game made in CREATE not here yet) waits for it, as before.
+                if (!sharedTable) StartSharing(false);
+                if (ApplyPacket(packet))
+                {
+                    waitingForContent = null;
+                    tableWithoutCards = true;
+                    ShowCardsLoading();
+                }
+                else
+                {
+                    awaitingTable = false; // dealt when the content is here (ReadContent), not asked for again meanwhile
+                    Debug.Log("[Online] The host's table needs its content first: it is dealt once the cards are here.");
+                }
+
+                return;
+            }
+
             if (!sharedTable) StartSharing(false);
             ApplyPacket(packet);
         }

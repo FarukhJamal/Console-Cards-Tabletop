@@ -690,7 +690,27 @@ namespace ConsoleCards.Presentation.Composition
             contentPercent = percent;
             contentStatus = $"Getting the host's cards… {percent}%";
             host.ShowMessage(contentStatus);
+            if (tableWithoutCards) ShowCardsLoading();
             RefreshFrontEnd();
+        }
+
+        // TABLE-FIRST: the table is here, its cards' faces are not yet: a chip on the table says how far they are.
+        private bool tableWithoutCards;
+        private bool cardsLoadingHidden;
+
+        private void ShowCardsLoading()
+        {
+            if (cardsLoadingHidden || host.runtimeUi == null) return;
+            int percent = Mathf.Clamp(contentPercent, 0, 100);
+            Chip("LOADING CARDS", UI.TableNoticeTone.Caution, $"Getting the host's cards… {percent}%",
+                "You are at the table. The cards show their faces as soon as they are here; until then they are blank.",
+                "Hide", HideCardsLoading, string.Empty, null);
+        }
+
+        private void HideCardsLoading()
+        {
+            cardsLoadingHidden = true;
+            CloseChip();
         }
 
         // The host's content arrived: kept in memory for the room (never on this computer's disk), read from now on, and a
@@ -731,6 +751,18 @@ namespace ConsoleCards.Presentation.Composition
             contentPercent = 100;
             contentStatus = "The host's cards are ready."; // LOBBY-PROGRESS
             host.ShowMessage(contentStatus);
+            if (tableWithoutCards)
+            {
+                // TABLE-FIRST: the table shown without its cards is dealt again from the host, now with them.
+                tableWithoutCards = false;
+                cardsLoadingHidden = false;
+                CloseChip();
+                host.ShowNotice("The host's cards are here.");
+                rebuildForSeat = true;
+                awaitingTable = false;
+                RequestTable("the host's cards arrived");
+            }
+
             if (waitingForContent != null && waitingForContent.Setup != null && waitingForContent.Setup.ContentHash == roomContentHash)
             {
                 OnlineTablePacket packet = waitingForContent;
@@ -770,6 +802,8 @@ namespace ConsoleCards.Presentation.Composition
         private void ForgetRoomContent()
         {
             waitingForContent = null;
+            tableWithoutCards = false; // TABLE-FIRST
+            cardsLoadingHidden = false;
             contentIncoming = null; // CONTENT-1
             hostContentBundle = null;
             hostContentHash = string.Empty;
