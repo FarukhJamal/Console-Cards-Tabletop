@@ -107,6 +107,22 @@ namespace ConsoleCards.Presentation.UI
 
         private string OnlinePath() => page == FrontEndPage.Room ? "Pages/Room/Board/" : "Pages/Lobby/Board/";
 
+        // LOAD-SCREEN (owner, 2026-11-27): the loading card over the room screen (built by the board builder, FE_Room v2):
+        // whose cards are coming, a bar and the percent. Shown only while the started game waits for this guest's cards.
+        private void RenderLoadingCard(string at, OnlineScreenModel online)
+        {
+            SetActive(at + "Loading", online.Loading);
+            if (!online.Loading) return;
+            SetText(at + "Loading/Card/Title", online.LoadingTitle);
+            SetText(at + "Loading/Card/Detail", online.LoadingDetail);
+            SetText(at + "Loading/Card/Percent", online.LoadingPercent + "%");
+            Transform fill = transform.Find(at + "Loading/Card/Bar/Fill");
+            if (fill is RectTransform rect && rect.parent is RectTransform bar)
+            {
+                rect.sizeDelta = new Vector2(bar.rect.width * Mathf.Clamp01(online.LoadingPercent / 100f), rect.sizeDelta.y);
+            }
+        }
+
         private void RenderOnlineBoard()
         {
             OnlineScreenModel online = model.Online;
@@ -140,6 +156,8 @@ namespace ConsoleCards.Presentation.UI
                 : online.Connected
                 ? "No open rooms yet: make one, or join a friend's with its code."
                 : online.Busy ? "Connecting…" : "Not connected.");
+
+            RenderLoadingCard(at, online); // LOAD-SCREEN
 
             // Your room.
             bool inRoom = online.InRoom;

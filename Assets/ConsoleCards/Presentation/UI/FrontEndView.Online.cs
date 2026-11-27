@@ -42,6 +42,12 @@ namespace ConsoleCards.Presentation.UI
 
         /// <summary>SEC-3 UI: replaces the READY hint (for example "This table is full…"); empty for the usual hint.</summary>
         public string Waiting = string.Empty;
+
+        // LOAD-SCREEN (owner, 2026-11-27): the game has started and this guest is still getting the host's cards.
+        public bool Loading;
+        public string LoadingTitle = string.Empty;
+        public string LoadingDetail = string.Empty;
+        public int LoadingPercent;
     }
 
     /// <summary>One room in the Lobby's list.</summary>

@@ -60,7 +60,7 @@ namespace ConsoleCards.Editor.UI
             if (Rebuild("FE_Library", 1, BuildLibrary)) built++;
             if (Rebuild("FE_Details", 5, BuildSheet)) built++; // 2: COVER-1, CHANGE PICTURE; 3: TILES-1, Tiles are placed; 5: HOTSEAT-1, Hot seat in the Players row
             if (Rebuild("FE_Lobby", 1, BuildLobbyBoard)) built++; // board 2b (BoardScreensBuilder.Online.cs)
-            if (Rebuild("FE_Room", 1, BuildRoomBoard)) built++;
+            if (Rebuild("FE_Room", 2, BuildRoomBoard)) built++; // 2: LOAD-SCREEN, the loading card (owner, 2026-11-27)
             BoardBackground();
             MenuPicture(); // BRAND-1: the main menu's picture (BoardScreensBuilder.Brand.cs)
             if (built > 0) AssetDatabase.SaveAssets();

@@ -69,6 +69,28 @@ namespace ConsoleCards.Editor.UI
             TextAt(start, "Label", 58, 0, 100, 56, bold, 17, Faint, TextAnchor.MiddleLeft, "START");
             start.gameObject.SetActive(inRoom);
             board.Find("Waiting").gameObject.SetActive(inRoom);
+            if (inRoom) BuildLoadingCard(board);
+        }
+
+        // LOAD-SCREEN (owner, 2026-11-27): over the whole room screen while a started game waits for this guest's cards:
+        // whose cards are coming, a bar, the percent and a line. Hidden until FrontEndView shows it.
+        private static void BuildLoadingCard(RectTransform board)
+        {
+            RectTransform cover = Rect(board, "Loading", 0, 0, 1280, 720);
+            Image shade = cover.gameObject.AddComponent<Image>();
+            shade.color = new Color(0.04f, 0.06f, 0.07f, 0.92f);
+            shade.raycastTarget = true; // nothing under it is pressed while it shows
+            RectTransform card = Box(cover, "Card", 340, 250, 600, 220, Panel, Orange, 1f);
+            Text kicker = TextAt(card, "Kicker", 32, 24, 536, 20, bold, 13, Orange, TextAnchor.MiddleLeft, "LOADING THE GAME");
+            kicker.fontStyle = FontStyle.Bold;
+            TextAt(card, "Title", 32, 50, 536, 36, bold, 24, Words, TextAnchor.MiddleLeft, "Getting the host's cards…");
+            RectTransform bar = Box(card, "Bar", 32, 104, 470, 18, Well, Edge, 1f);
+            Box(bar, "Fill", 0, 0, 0, 18, Cyan, null, 0f).GetComponent<Image>().raycastTarget = false;
+            TextAt(card, "Percent", 510, 100, 58, 26, bold, 17, Cyan, TextAnchor.MiddleRight, "0%");
+            Text detail = TextAt(card, "Detail", 32, 138, 536, 56, medium, 13, Muted, TextAnchor.UpperLeft,
+                "The game has started. You sit down at the table as soon as the cards are here.");
+            detail.horizontalOverflow = HorizontalWrapMode.Wrap;
+            cover.gameObject.SetActive(false);
         }
 
         // The lobby: MAKE A ROOM, a code and JOIN, the open rooms.

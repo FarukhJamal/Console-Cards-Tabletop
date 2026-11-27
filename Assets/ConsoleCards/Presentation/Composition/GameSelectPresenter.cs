@@ -164,6 +164,7 @@ namespace ConsoleCards.Presentation.Composition
 
             GameSelectEntry entry = FindGameSelectEntry(entries, gameSelectEntryId) ?? entries[0];
             gameSelectEntryId = entry.Id;
+            PreloadForRoom(entry); // LOAD-EARLY
             if (gameSelectModeIndex >= entry.ModeNames.Count) gameSelectModeIndex = 0;
             List<CardEditorRowModel> rows = new List<CardEditorRowModel>(entries.Count);
             for (int i = 0; i < entries.Count; i++)
@@ -302,6 +303,26 @@ namespace ConsoleCards.Presentation.Composition
             }
             AddGameDetails(model, entry.Game);
             AddDeckSet(model, entry);
+        }
+
+        // LOAD-EARLY (owner, 2026-11-27): the host's game screen in a room: the picked game's content goes to the room now,
+        // once per game picked (not on every refresh of the screen).
+        private string preloadedEntryId;
+
+        private void PreloadForRoom(GameSelectEntry entry)
+        {
+            if (!host.HasOnline || !host.Online.IsHosting || !host.Online.InRoom)
+            {
+                preloadedEntryId = null;
+                return;
+            }
+
+            if (entry == null || entry.Id == preloadedEntryId) return;
+            preloadedEntryId = entry.Id;
+            TableContentNeeds needs = entry.PlayerGame != null
+                ? TableContentNeeds.ForPlayerGame(entry.PlayerGame, host.Cartridges.DefaultGame)
+                : entry.Game != null ? TableContentNeeds.ForGame(entry.Game) : null;
+            host.Online.PreloadTableContent(needs);
         }
 
         // Owner, 2026-10-26: Deck Set in one word. The game's own deck is Standard (None on an Empty Table), a deck of

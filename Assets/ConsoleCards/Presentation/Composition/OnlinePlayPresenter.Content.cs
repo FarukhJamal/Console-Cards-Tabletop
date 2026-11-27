@@ -47,6 +47,23 @@ namespace ConsoleCards.Presentation.Composition
             tableNeeds = needs;
         }
 
+        // LOAD-EARLY (owner, 2026-11-27: "the downloading starts only when the game starts"): the host picked a game on the
+        // game screen in a room: its content starts going to the room now, while everyone is still in the room screen.
+        // START then finds it sent (the same content is never sent twice). Event-time only (a game picked).
+        internal void PreloadTableContent(TableContentNeeds needs)
+        {
+            if (!IsHosting || !InRoom || needs == null || PrivateDevSession.Enabled) return;
+            tableNeeds = needs;
+            try
+            {
+                SendContentToRoom();
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[Online] The chosen game's content could not be sent ahead: {exception.Message}");
+            }
+        }
+
         private TableContentNeeds CurrentNeeds()
         {
             if (tableNeeds != null) return tableNeeds;
@@ -552,6 +569,7 @@ namespace ConsoleCards.Presentation.Composition
             if (index >= member.ContentNext) member.ContentNext = index + 1; // CONTENT-STALL: a part confirmed again after a re-send
             if (index > member.ContentAcked)
             {
+                NoteGuestLoading(member, index + 1, count); // LOAD-SCREEN
                 // CONTENT-STALL diagnostics: every tenth of the transfer, how far it got (no names of files, no content).
                 if ((index + 1) * 10 / count > (member.ContentAcked + 1) * 10 / count)
                     Debug.Log($"[Online] Content to {member.Name}: {(index + 1) * 100 / count}% confirmed.");
@@ -563,6 +581,30 @@ namespace ConsoleCards.Presentation.Composition
             member.ContentHash = member.ContentSending; // only now does the computer count as having the content
             StopContentTransfer(member);
             Debug.Log($"[Online] Sending the room's content to {member.Name}: done.");
+            if (roomStarted) TellRoom($"{UI.PlayerNameLimit.Apply(member.Name)} has the cards.", null);
+        }
+
+        // LOAD-SCREEN (owner, 2026-11-27: "a notification for the players who already joined, or for the host, that the
+        // cards are being downloaded for the other players"): once the game has started, every quarter of a guest's
+        // transfer is told to the host and the others (not to that guest: it has its own loading card).
+        private void NoteGuestLoading(Member member, int confirmed, int count)
+        {
+            if (!roomStarted || count < 4) return;
+            int before = (member.ContentAcked + 1) * 4 / count;
+            int now = confirmed * 4 / count;
+            if (now <= before || now >= 4) return;
+            TellRoom($"{UI.PlayerNameLimit.Apply(member.Name)} is getting the cards… {now * 25}%", member);
+        }
+
+        private void TellRoom(string text, Member except)
+        {
+            host.ShowNotice(text);
+            for (int i = 0; i < members.Count; i++)
+            {
+                Member other = members[i];
+                if (other == except || other.IsHost || !other.Connected || other.Connection < 0) continue;
+                SendNotice(other, text);
+            }
         }
 
         private void SendContentToRoom()
@@ -720,6 +762,7 @@ namespace ConsoleCards.Presentation.Composition
             if (hosting || string.IsNullOrEmpty(wanted) || wanted == roomContentHash) return true;
             waitingForContent = packet;
             host.ShowMessage(contentPercent > 0 && contentPercent < 100 ? $"Getting the host's cards… {contentPercent}%" : "Getting the host's cards…");
+            RefreshFrontEnd(); // LOAD-SCREEN: the loading card shows over the room screen
             return false;
         }
 

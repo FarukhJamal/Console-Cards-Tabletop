@@ -1383,6 +1383,19 @@ namespace ConsoleCards.Presentation.Composition
             // SEC-3 UI (owner, 2026-11-05): a computer refused the table says why, instead of "Waiting for the host to start".
             if (!sharedTable && !string.IsNullOrEmpty(watchNotice)) model.Waiting = watchNotice;
             else if (!hosting && !sharedTable && contentStatus.Length > 0) model.Waiting = contentStatus; // LOBBY-PROGRESS (owner, 2026-11-27)
+            // LOAD-SCREEN (owner, 2026-11-27: "both join the game, with a loading screen for the player still getting the
+            // cards"): the host's table is here and waits for its cards; the room screen shows the loading card over it.
+            if (!hosting && waitingForContent != null)
+            {
+                Member hostMember = null;
+                for (int i = 0; i < members.Count && hostMember == null; i++) if (members[i].IsHost) hostMember = members[i];
+                string hostName = hostMember != null && !string.IsNullOrEmpty(hostMember.Name) ? PlayerNameLimit.Apply(hostMember.Name) : "the host";
+                model.Loading = true;
+                model.LoadingPercent = Mathf.Clamp(contentPercent, 0, 100);
+                model.LoadingTitle = $"Getting {hostName}'s cards…";
+                model.LoadingDetail = "The game has started. You sit down at the table as soon as the cards are here; the others are told.";
+            }
+
             return model;
         }
 
