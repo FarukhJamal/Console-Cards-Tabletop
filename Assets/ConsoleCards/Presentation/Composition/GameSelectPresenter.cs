@@ -296,11 +296,9 @@ namespace ConsoleCards.Presentation.Composition
                     model.CanStart = false;
                     model.Status = "Waiting for everyone in the room to press READY.";
                 }
-                else if (entry.PlayerGame != null)
-                {
-                    model.CanStart = false;
-                    model.Status = "Games you made cannot be played online yet: choose another game.";
-                }
+                // ONLINE-OWN-GAME (owner, 2026-11-27: "unable to start my own game from the host"): the old gate refused games
+                // made in CREATE online. Stage 7 sends a made game's table content to the room (TableContentNeeds.ForPlayerGame,
+                // kept in memory on the guests), and START for a made game already prepares the hosted start, so it is allowed.
             }
             AddGameDetails(model, entry.Game);
             AddDeckSet(model, entry);
