@@ -406,6 +406,7 @@ namespace ConsoleCards.Presentation.Composition
             if (InRoom && !hosting) SendSmall(MsgBye);
             session.Disconnect(); // the scene is going (Play mode ends, or a profile switch reloads it): no reconnecting
             ContentPackStore.RoomRoot = null; // MP-4: the next scene reads the profile's own saves
+            ContentPackStore.RoomIsOwn = false;
             RoomContentFiles.Clear(); // ROOM-MEM
             if (subscribed)
             {

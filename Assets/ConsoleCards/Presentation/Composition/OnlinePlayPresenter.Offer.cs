@@ -33,6 +33,10 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         private ContentOffer pendingOffer;
+        // SESSION-OFFER (owner, 2026-11-27: "Make offered cards session only"): cards the host took from guests in this room.
+        // They are put into the room's content (and the host's in-memory copy of it), never written to the host's disk.
+        private readonly List<ContentOffer> acceptedOffers = new List<ContentOffer>();
+        private int acceptedOfferStamp;
         private float lastOfferSentAt = -100f;
 
         /// <summary>A guest in a normal room with a game on can offer its own content to the host.</summary>
@@ -148,14 +152,14 @@ namespace ConsoleCards.Presentation.Composition
             if (host.runtimeUi == null) return;
             List<PopupActionOption> actions = new List<PopupActionOption>(2)
             {
-                new PopupActionOption("Add them to my cards", true, () => AnswerOffer(true)),
+                new PopupActionOption("Use them in this room", true, () => AnswerOffer(true)),
                 new PopupActionOption("Refuse", true, () => AnswerOffer(false)),
             };
             host.runtimeUi.ShowContextMenu(
                 new Vector2(Screen.width * 0.5f, Screen.height * 0.5f),
                 "CARDS FROM " + member.Name.ToUpperInvariant(),
-                $"{member.Name} offers {what} for this game. Added, they join your own cards (yours win where they clash) and "
-                    + $"everyone plays them from the next table. No answer in {OfferSeconds:0} s refuses.",
+                $"{member.Name} offers {what} for this game. Taken, they join your cards for this session only (yours win where "
+                    + $"they clash; nothing is saved on your computer) and everyone plays them from the next table. No answer in {OfferSeconds:0} s refuses.",
                 actions,
                 host.ContextMenus.CloseContextMenu,
                 host.ContextMenus.DismissPopupFromSecondary);
@@ -176,30 +180,12 @@ namespace ConsoleCards.Presentation.Composition
 
             try
             {
-                ContentPackStore mine = ContentPackStore.ForOwnEdits(host.EnsureProfile());
-                PlayerCardsFile cards = PlayerCardsFile.Merge(offer.Cards, mine.LoadCards(offer.GameId)); // the host's win
-                PlayerDecksFile decks = PlayerDecksFile.Merge(offer.Decks, mine.LoadDecks(offer.GameId));
-                ContentUploadIndex index = mine.LoadUploads(offer.GameId);
-                int added = 0;
-                for (int i = 0; i < offer.Pictures.Count; i++)
-                {
-                    (string key, string file, byte[] bytes) = offer.Pictures[i];
-                    string extension = Path.GetExtension(file ?? string.Empty).ToLowerInvariant();
-                    if (bytes == null || bytes.Length == 0 || (extension != ".png" && extension != ".jpg" && extension != ".jpeg")) continue;
-                    if (index.pictures.Exists(p => p != null && string.Equals(p.key, key, StringComparison.OrdinalIgnoreCase))) continue;
-                    string name = ContentPackStore.SafeName(key, "picture") + extension;
-                    string folder = mine.UploadsFolder(offer.GameId);
-                    Directory.CreateDirectory(folder);
-                    File.WriteAllBytes(Path.Combine(folder, name), bytes);
-                    index.pictures.Add(new ContentArtFile { key = key, file = name });
-                    added++;
-                }
-
-                bool saved = mine.SaveCards(offer.GameId, cards) & mine.SaveDecks(offer.GameId, decks);
-                mine.SaveUploads(offer.GameId, index);
-                string said = saved
-                    ? $"{offer.From.Name}'s cards were added to the host's cards. Everyone plays them from the next table."
-                    : $"{offer.From.Name}'s cards could not all be saved on the host's computer.";
+                // SESSION-OFFER: kept in memory for this room only; RefreshHostContent merges it into what the room plays.
+                acceptedOffers.Add(offer);
+                acceptedOfferStamp++;
+                SendContentToRoom();
+                string said = $"{offer.From.Name}'s cards are in this room's cards for this session (not saved on the host's computer). "
+                    + "Everyone plays them from the next table.";
                 host.ShowNotice(said);
                 for (int i = 0; i < members.Count; i++)
                 {
@@ -207,13 +193,76 @@ namespace ConsoleCards.Presentation.Composition
                     if (!member.IsHost && member.Connected && member.Connection >= 0) SendNotice(member, said);
                 }
 
-                Debug.Log($"[Online] Took {offer.From.Name}'s content into the host's saves for {offer.GameId}: {cards.cards.Count} card(s) "
-                    + $"and {decks.decks.Count} deck(s) in all, {added} new picture(s).");
+                Debug.Log($"[Online] Took {offer.From.Name}'s content for this session only ({offer.Cards?.cards?.Count ?? 0} card(s), "
+                    + $"{offer.Decks?.decks?.Count ?? 0} deck(s), {offer.Pictures?.Count ?? 0} picture(s)); nothing was written to disk.");
             }
             catch (Exception exception)
             {
                 Debug.LogWarning($"[Online] {offer.From.Name}'s cards could not be added: {exception.Message}");
                 host.ShowNotice($"{offer.From.Name}'s cards could not be added (the log says why).");
+            }
+        }
+
+        // SESSION-OFFER: the taken offers for the table's games joined to the host's cards, decks and picture list (the host's
+        // records win), as items of the room's bundle. Only when the content is made, never per frame.
+        private void AddAcceptedOffers(string root, TableContentNeeds needs, List<ContentItem> items, ref long total)
+        {
+            ContentPackStore disk = new ContentPackStore(root);
+            int skipped = 0;
+            foreach (string gameId in needs.GameIds)
+            {
+                PlayerCardsFile cards = null;
+                PlayerDecksFile decks = null;
+                ContentUploadIndex index = null;
+                string folder = ContentPackStore.SafeName(gameId, "game");
+                for (int o = 0; o < acceptedOffers.Count; o++)
+                {
+                    ContentOffer offer = acceptedOffers[o];
+                    if (offer == null || !string.Equals(offer.GameId, gameId, StringComparison.OrdinalIgnoreCase)) continue;
+                    cards = PlayerCardsFile.Merge(offer.Cards, cards ?? disk.LoadCards(gameId)); // the host's (and earlier) win
+                    decks = PlayerDecksFile.Merge(offer.Decks, decks ?? disk.LoadDecks(gameId));
+                    index = index ?? disk.LoadUploads(gameId);
+                    for (int i = 0; offer.Pictures != null && i < offer.Pictures.Count; i++)
+                    {
+                        (string key, string file, byte[] bytes) = offer.Pictures[i];
+                        string extension = Path.GetExtension(file ?? string.Empty).ToLowerInvariant();
+                        if (bytes == null || bytes.Length == 0 || (extension != ".png" && extension != ".jpg" && extension != ".jpeg")) continue;
+                        if (index.pictures.Exists(p => p != null && string.Equals(p.key, key, StringComparison.OrdinalIgnoreCase))) continue;
+                        string name = ContentPackStore.SafeName(key, "picture") + extension;
+                        string relative = folder + "/uploads/" + name;
+                        if (items.Exists(item => string.Equals(item.Relative, relative, StringComparison.OrdinalIgnoreCase))) continue;
+                        if (!TryAdd(items, new ContentItem { Relative = relative, Bytes = bytes, Length = bytes.Length }, ref total, ref skipped)) continue;
+                        index.pictures.Add(new ContentArtFile { key = key, file = name });
+                    }
+                }
+
+                if (cards == null) continue;
+                cards.formatVersion = PlayerCardsFile.CurrentFormatVersion;
+                decks.formatVersion = PlayerDecksFile.CurrentFormatVersion;
+                if (string.IsNullOrEmpty(cards.gameStableId)) cards.gameStableId = gameId;
+                if (string.IsNullOrEmpty(decks.gameStableId)) decks.gameStableId = gameId;
+                SetJsonItem(items, folder + "/" + PlayerCardsFile.FileName, cards.Normalised(), ref total);
+                SetJsonItem(items, folder + "/" + PlayerDecksFile.FileName, decks.Normalised(), ref total);
+                SetJsonItem(items, folder + "/uploads/" + ContentUploadIndex.FileName, index, ref total);
+            }
+
+            if (skipped > 0) Debug.LogWarning($"[Online] {skipped} offered picture(s) are too big to share with the room and were left out.");
+        }
+
+        private static void SetJsonItem(List<ContentItem> items, string relative, object value, ref long total)
+        {
+            byte[] bytes = System.Text.Encoding.UTF8.GetBytes(JsonUtility.ToJson(value, true));
+            int at = items.FindIndex(item => string.Equals(item.Relative, relative, StringComparison.OrdinalIgnoreCase));
+            ContentItem made = new ContentItem { Relative = relative, Bytes = bytes, Length = bytes.Length };
+            if (at >= 0)
+            {
+                total += bytes.Length - items[at].Length;
+                items[at] = made;
+            }
+            else
+            {
+                items.Add(made);
+                total += bytes.Length;
             }
         }
 

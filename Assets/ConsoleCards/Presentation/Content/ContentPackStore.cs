@@ -33,10 +33,18 @@ namespace ConsoleCards.Presentation.Content
         /// </summary>
         public static string RoomRoot;
 
+        /// <summary>
+        /// SESSION-OFFER (owner, 2026-11-27: offered cards are for the session only): true while <see cref="RoomRoot"/> is this
+        /// computer's OWN room content held in memory (the host took a guest's cards for the session). The host is then not in
+        /// someone else's room; it only reads the session's content instead of its disk.
+        /// </summary>
+        public static bool RoomIsOwn;
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ForgetRoomRoot()
         {
             RoomRoot = null;
+            RoomIsOwn = false;
             RoomContentFiles.Clear(); // ROOM-MEM: nothing of a host's is kept between runs
             movedProfileEdits = false;
         }
@@ -115,7 +123,7 @@ namespace ConsoleCards.Presentation.Content
         }
 
         /// <summary>True while this computer sits in someone else's online room and reads the host's content.</summary>
-        public static bool InSomeoneElsesRoom => !string.IsNullOrEmpty(RoomRoot);
+        public static bool InSomeoneElsesRoom => !string.IsNullOrEmpty(RoomRoot) && !RoomIsOwn;
 
         /// <summary>
         /// ROOM-MEM (owner, 2026-11-27): true when this store reads the host's content, which is held in memory only:

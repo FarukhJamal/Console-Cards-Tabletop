@@ -78,7 +78,10 @@ namespace ConsoleCards.Presentation.Composition
             try
             {
                 // A computer that took over hosting (MP-5) goes on with the room's content it already has (held in memory).
-                root = !string.IsNullOrEmpty(ContentPackStore.RoomRoot) ? ContentPackStore.RoomRoot : host.EnsureProfile().GamesFolder;
+                // SESSION-OFFER: a host's own session content (cards taken from a guest) is made again from its disk each time.
+                root = !string.IsNullOrEmpty(ContentPackStore.RoomRoot) && !ContentPackStore.RoomIsOwn
+                    ? ContentPackStore.RoomRoot
+                    : host.EnsureProfile().GamesFolder;
             }
             catch (Exception exception)
             {
@@ -89,9 +92,17 @@ namespace ConsoleCards.Presentation.Composition
             TableContentNeeds needs = CurrentNeeds();
             string key = needs.Key();
             List<ContentItem> items = ContentFiles(root, needs, out long total);
+            bool withOffers = acceptedOffers.Count > 0 && !ContentIO.IsRoomPath(root);
+            if (withOffers)
+            {
+                key += "|offers:" + acceptedOfferStamp;
+                AddAcceptedOffers(root, needs, items, ref total);
+            }
+
             string fingerprint = Fingerprint(key, items);
             if (fingerprint == hostContentFiles && hostContentBundle != null) return;
             byte[] body;
+            Dictionary<string, byte[]> session = withOffers ? new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase) : null;
             using (MemoryStream stream = new MemoryStream((int)Math.Min(total + 1024, int.MaxValue)))
             using (BinaryWriter bundle = new BinaryWriter(stream, Encoding.UTF8))
             {
@@ -112,6 +123,7 @@ namespace ConsoleCards.Presentation.Composition
                     bundle.Write(items[i].Relative);
                     bundle.Write(bytes.Length);
                     bundle.Write(bytes);
+                    if (session != null) session[RoomContentFiles.NormaliseRelative(items[i].Relative)] = bytes;
                 }
 
                 bundle.Flush();
@@ -134,6 +146,15 @@ namespace ConsoleCards.Presentation.Composition
             hostContentFiles = fingerprint;
             hostContentKey = key;
             hostContentHash = hash;
+            if (session != null)
+            {
+                // SESSION-OFFER (owner, 2026-11-27): the host plays the guests' cards from memory too; its disk is unchanged.
+                RoomContentFiles.Set(session);
+                ContentPackStore.RoomRoot = RoomContentFiles.Root;
+                ContentPackStore.RoomIsOwn = true;
+                host.ReloadContentStores();
+            }
+
             Debug.Log($"[Online] Your content for the room: {needs.GameIds.Count} game folder(s){(needs.UsesLibrary ? " and your library" : string.Empty)}, "
                 + $"{items.Count} files, {hostContentBundle.Length / 1024} KB.");
         }
@@ -661,6 +682,7 @@ namespace ConsoleCards.Presentation.Composition
 
             RoomContentFiles.Set(received);
             ContentPackStore.RoomRoot = RoomContentFiles.Root;
+            ContentPackStore.RoomIsOwn = false; // SESSION-OFFER: this is another host's content
             roomContentHash = hash;
             host.ReloadContentStores();
             Debug.Log($"[Online] The host's content is in use for this room: {RoomContentFiles.Count} files, {RoomContentFiles.TotalBytes / 1024} KB (kept in memory only).");
@@ -714,6 +736,8 @@ namespace ConsoleCards.Presentation.Composition
             contentStatus = string.Empty;
             contentPercent = 0;
             RoomContentFiles.Clear(); // ROOM-MEM (owner, 2026-11-27): the host's files go from this computer's memory
+            acceptedOffers.Clear(); // SESSION-OFFER: cards taken from guests go with the session
+            ContentPackStore.RoomIsOwn = false;
             if (string.IsNullOrEmpty(ContentPackStore.RoomRoot) && roomContentHash.Length == 0) return;
             ContentPackStore.RoomRoot = null;
             roomContentHash = string.Empty;
