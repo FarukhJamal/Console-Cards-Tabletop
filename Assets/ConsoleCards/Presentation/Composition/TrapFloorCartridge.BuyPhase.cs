@@ -406,7 +406,7 @@ namespace ConsoleCards.Presentation.Composition
                 if (!consoleDeckId.IsEmpty && host.matchState.Containers.TryGetValue(consoleDeckId, out ContainerState consoleDeck))
                 {
                     collected = CollectConsoleCards(consoleDeckId);
-                    if (consoleDeck.Count > 1) host.ShuffleDeck(consoleDeckId);
+                    if (consoleDeck.Count > 1) host.ShuffleDeckWithoutShow(consoleDeckId); // DEAL-SHUFFLE: no riffle mid-table
                     dealtPlayers = DealConsoleHands(turn, consoleDeckId);
                 }
 

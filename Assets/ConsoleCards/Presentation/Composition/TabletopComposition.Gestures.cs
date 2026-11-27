@@ -280,7 +280,8 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             bool flicked = view.PhysicalObject.Flick(velocity);
-            if (flicked && view is DieView) RollFloorDiePartner(view.ObjectId); // COLLAPSE-ROLL
+            // DICE-SINGLE (owner, 2026-11-27: "unable to roll a single die, it rolls both"): a player's throw rolls only that die;
+            // the collapse watch counts each floor die rolled since it asked, so the two may be thrown one after the other.
             StopFlickChargeSound(flicked, strength); // POL-5: a snap on release
             if (!flicked) ShowMessage("Flick rejected.");
         }

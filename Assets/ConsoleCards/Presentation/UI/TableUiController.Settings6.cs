@@ -88,7 +88,7 @@ namespace ConsoleCards.Presentation.UI
             model.TipsMode = !recTips ? 2 : Mathf.Clamp(PlayerPrefs.GetInt(TipsModePref, 0), 0, 1);
             model.SetTipsMode = rawSetTips != null ? setTipsModeFromSettings ??= SetTipsMode : null;
             model.LightText = LookSettings.LightName(LookSettings.Light);
-            model.CycleLight = lookLight != null ? cycleLightFromSettings ??= step =>
+            model.CycleLight = lookLight != null && LookSettings.LightChoiceEnabled ? cycleLightFromSettings ??= step => // LIGHT-OFF: no row
             {
                 lookLight?.Invoke(step);
                 RefreshSettingsView();

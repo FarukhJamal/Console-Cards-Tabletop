@@ -36,6 +36,7 @@ namespace ConsoleCards.Presentation.UI
 
         private void RenderSettings()
         {
+            SetActive(SettingsRows + "Light", ConsoleCards.Presentation.Settings.LookSettings.LightChoiceEnabled); // LIGHT-OFF
             SetText(SettingsRows + "Light/Value", model.LightText);
             SetText(SettingsRows + "Colours/Value", model.ColoursText);
             SetText(SettingsRows + "Quality/Value", model.QualityText);

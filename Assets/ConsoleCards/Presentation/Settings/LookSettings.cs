@@ -40,10 +40,17 @@ namespace ConsoleCards.Presentation.Settings
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void Forget() => loaded = false;
 
+        /// <summary>
+        /// LIGHT-OFF (owner, 2026-11-27: "disable the lighting settings for now, the day/night one"): the room keeps the
+        /// Arcade light and the Light row is hidden in both Settings screens. A saved Day or Evening is kept on disk but
+        /// not used while this is false.
+        /// </summary>
+        public const bool LightChoiceEnabled = false;
+
         public static LightPreset Light
         {
-            get { Load(); return light; }
-            set { Load(); light = value; Save(); }
+            get { Load(); return LightChoiceEnabled ? light : LightPreset.Arcade; }
+            set { Load(); if (!LightChoiceEnabled) return; light = value; Save(); }
         }
 
         public static GraphicsQuality Quality

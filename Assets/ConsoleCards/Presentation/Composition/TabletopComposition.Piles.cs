@@ -110,6 +110,20 @@ namespace ConsoleCards.Presentation.Composition
             return result;
         }
 
+        // DEAL-SHUFFLE (owner, 2026-11-27: "when Console cards are dealt the cards are shown shuffling in the middle of the
+        // table"): the Buy Phase collects every Console Card (they are still on their way to the deck) and deals at once.
+        // The riffle took those scattered cards as its start and flew them into a riffle first; here the order is shuffled
+        // with the sound only, and the deal that follows moves the cards.
+        internal ShuffleDeckResult ShuffleDeckWithoutShow(ContainerId deckContainerId)
+        {
+            EnsureInitialized();
+            ShuffleDeckResult result = TableAuthority.Submit<ShuffleDeckCommand, ShuffleDeckResult>(
+                new ShuffleDeckCommand(CreateCommandContext(), deckContainerId));
+            if (result.Succeeded) PlayShuffleSound();
+            RefreshCardContentVisibility();
+            return result;
+        }
+
         public ControllerInputHandDrawResult DrawUpToConfiguredHandLimit()
         {
             EnsureInitialized();

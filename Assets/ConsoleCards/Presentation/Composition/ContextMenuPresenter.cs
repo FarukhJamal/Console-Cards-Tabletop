@@ -1363,8 +1363,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            host.RollFloorDiePartner(targetDieId); // COLLAPSE-ROLL
-            CloseContextMenu();
+            CloseContextMenu(); // DICE-SINGLE (owner, 2026-11-27): Roll rolls this die only
         }
 
         // B04: rolls one die, with no menu check (a shuffle zone rolls the dice put in it this way).

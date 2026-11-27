@@ -1032,28 +1032,17 @@ namespace ConsoleCards.Presentation.Composition
         internal int RollSelectedDice()
         {
             int rolled = 0;
-            int floorDiceRolled = 0;
-            TabletopObjectId floorDie = TabletopObjectId.Empty;
             for (int i = 0; i < toolSelection.Count; i++)
             {
-                if (toolSelection[i].View is DieView die && die.PhysicalObject != null && die.PhysicalObject.Roll())
-                {
-                    rolled++;
-                    if (IsFloorCollapseDie(die.ObjectId))
-                    {
-                        floorDiceRolled++;
-                        floorDie = die.ObjectId;
-                    }
-                }
+                if (toolSelection[i].View is DieView die && die.PhysicalObject != null && die.PhysicalObject.Roll()) rolled++;
             }
 
-            if (floorDiceRolled == 1) RollFloorDiePartner(floorDie); // COLLAPSE-ROLL: one of the pair was selected
+            // DICE-SINGLE (owner, 2026-11-27): only the selected dice roll; the collapse watch counts each floor die apart.
             return rolled;
         }
 
-        // COLLAPSE-ROLL (owner, 2026-11-25: R did not count as the collapse roll; only both dice selected + Roll worked):
-        // while the floor waits for its collapse roll, rolling one floor die rolls the other too, so R, the menu's Roll and
-        // a flick all make the same two-dice roll on this computer.
+        // COLLAPSE-ROLL: rolls the other floor die while the floor waits for its collapse roll. DICE-SINGLE (owner,
+        // 2026-11-27): only the host's Force the floor turn uses it now; a player's roll rolls one die.
         internal void RollFloorDiePartner(TabletopObjectId rolledId)
         {
             if (trapFloorTemplate == null || !TrapFloorGame.WaitsForFloorDiceRoll || !IsFloorCollapseDie(rolledId)) return;
@@ -1083,7 +1072,6 @@ namespace ConsoleCards.Presentation.Composition
             if (hoverView is DieView hoveredDie && hoverPileId.IsEmpty)
             {
                 if (hoveredDie.PhysicalObject == null || !hoveredDie.PhysicalObject.Roll()) ShowMessage("That die can't be rolled now.");
-                else RollFloorDiePartner(hoveredDie.ObjectId); // COLLAPSE-ROLL
                 return;
             }
 

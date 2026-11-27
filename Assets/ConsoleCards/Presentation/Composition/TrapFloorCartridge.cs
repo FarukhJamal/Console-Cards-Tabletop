@@ -3943,6 +3943,15 @@ namespace ConsoleCards.Presentation.Composition
                 CollectTakenPrizesOffPawns(); // the prize the pawn just left goes by the Console now
                 host.FeedbackLine($"{FormatPlayerName(player)} steps back to the tile they stood on before.", FeedbackSeverity.Info);
                 RevealSteppedBackTile(player, originId); // rules v1.151126: a face-down tile there turns over
+                // EXIT-STEPBACK (owner, 2026-11-27: "he gets the key and moves back to the Grand Exit: he should win"): the
+                // step back is a landing too, so the exits are checked on the tile the pawn is set back on (the pawn that
+                // left the Grand Exit for a Key escapes once it stands on it again with the Key).
+                if (!PlayAssist.IsFree
+                    && host.trapFloorTurnState != null
+                    && host.trapFloorTurnState.ActivePlayerId == player)
+                {
+                    TryTakeExitsAfterMove(originId);
+                }
             }
         }
 
@@ -5628,6 +5637,10 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (host.EnsureBoardFeedback()) host.boardFeedback.ShowReach(reachPositions, ReachMarkerColour);
+            // REACH-LOG (owner, 2026-11-27: "move highlighter not showing on floor 2 for the guest"): once per pick-up, so the
+            // next run shows whether the lights were placed (and how many) or skipped.
+            Debug.Log($"[Hints] Reach lights: {reachPositions.Count} tile(s), {allowance} step(s) from "
+                + $"{start.X},{start.Y} (round {host.trapFloorTurnState.CurrentRound}).", host);
             UpdateStepsChip();
         }
 
