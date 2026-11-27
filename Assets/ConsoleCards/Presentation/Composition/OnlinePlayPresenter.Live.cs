@@ -27,6 +27,7 @@ namespace ConsoleCards.Presentation.Composition
         private const byte LiveHeldCard = 5; // LIVE-HELD (owner, 2026-11-18): a card held out of a deck, hand or Console
         private const byte LiveChat = 6; // CHAT-1 (designer note 03, 2026-11-17): a player's chat message
         private const byte LiveHand = 7; // HANDS-1 (designer note 01, 2026-11-17): where a player's pointer is on the table
+        private const byte LiveRulebook = 8; // BOOK-SYNC (owner, 2026-11-27): the table's rulebook was put down here
         private const float HandKeepSeconds = 2f; // a still pointer is said again this often (the others drop it after 6 s)
         private const int MaxLivePoints = 256; // per message; a longer line goes in several
         private readonly Vector3[] livePoints = new Vector3[MaxLivePoints];
@@ -45,6 +46,17 @@ namespace ConsoleCards.Presentation.Composition
             writer.Write(LivePing);
             WriteGuid(player.Value);
             WriteVector(point);
+            SendLive();
+        }
+
+        /// <summary>BOOK-SYNC: the table's one rulebook was put down at this place here; everyone else moves theirs there.</summary>
+        internal void SendRulebookMoved(PlayerId player, Vector3 position)
+        {
+            if (!CanSendLive()) return;
+            BeginMessage(MsgLive);
+            writer.Write(LiveRulebook);
+            WriteGuid(player.Value);
+            WriteVector(position);
             SendLive();
         }
 
@@ -340,6 +352,9 @@ namespace ConsoleCards.Presentation.Composition
                             break;
                         }
 
+                    case LiveRulebook: // BOOK-SYNC
+                        host.ShowRemoteRulebookMove(ReadVector(reader));
+                        break;
                     case LiveChat: // CHAT-1
                         host.ShowRemoteChat(player, reader.ReadString());
                         break;

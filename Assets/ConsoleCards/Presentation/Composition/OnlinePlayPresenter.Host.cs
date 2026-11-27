@@ -225,15 +225,11 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (IsNextHost())
-            {
-                takingOver = true;
-                session.TakeOverRoom();
-            }
-            else
-            {
-                session.ExpectNewHost(NewHostWaitSeconds);
-            }
+            // NO-TAKEOVER (owner, 2026-11-27: "when the host leaves, the room should be deleted and the guest should leave
+            // the lobby"): no guest becomes the host any more (MP-5 is off everywhere). The take-over also failed inside
+            // Fusion (StartGame: NullReferenceException) and left the guest as a lone "host" of a dead room. The guest
+            // tries to get back in as after any lost connection; a room that is gone ends its session.
+            Debug.Log("[Online] Lost the room: getting back in if it is still there (no take-over).");
         }
 
         // This computer now hosts the room it was in: the players stay, the table goes on from this computer's copy.

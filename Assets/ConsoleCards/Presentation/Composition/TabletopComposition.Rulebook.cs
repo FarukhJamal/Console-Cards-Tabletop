@@ -117,7 +117,7 @@ namespace ConsoleCards.Presentation.Composition
                 () => OpenRulebookObject(),
                 SetRulebookReading,
                 () => runtimeUi?.OpenScreenRulebook());
-            rulebookObject.SetMoveHandlers(SetRulebookHeld, position => rulebookMovedTo = position);
+            rulebookObject.SetMoveHandlers(SetRulebookHeld, RulebookPutDownHere);
             return true;
         }
 
@@ -188,6 +188,20 @@ namespace ConsoleCards.Presentation.Composition
 
         // Owner, 2026-11-03: the book can be carried (hold it, or drag it); it stays where it was put on this table.
         private Vector3? rulebookMovedTo;
+
+        // BOOK-SYNC (owner, 2026-11-27: "the rulebook placement is not the same on every screen"): the table has one
+        // rulebook. Where a player puts it down goes to the others, and they put theirs there too.
+        private void RulebookPutDownHere(Vector3 position)
+        {
+            rulebookMovedTo = position;
+            if (HasOnline) Online.SendRulebookMoved(localPlayerId, position);
+        }
+
+        internal void ShowRemoteRulebookMove(Vector3 position)
+        {
+            rulebookMovedTo = position;
+            if (rulebookObject != null && rulebookObject.gameObject.activeInHierarchy) PlaceRulebookObject();
+        }
         private bool rulebookHeldInputWasOn;
 
         // While the book is carried the table does not also start a selection box or a camera drag under it.
@@ -275,12 +289,14 @@ namespace ConsoleCards.Presentation.Composition
         {
             position = Vector3.zero;
             rotation = Quaternion.identity;
-            if (playerLayout == null || coordinateConverter == null || playerLayout.Seats.Count == 0
-                || !TryGetSeatIndex(localPlayerId, out int seatIndex)
-                || !playerLayout.TryGetSeat(seatIndex, out PlayerSeatLayoutEntry seat))
+            if (playerLayout == null || coordinateConverter == null || playerLayout.Seats.Count == 0)
             {
                 return false;
             }
+
+            // BOOK-SYNC: the first seat's side, the same on every screen (it was this screen's seat, so each computer laid
+            // the one rulebook somewhere else).
+            var seat = playerLayout.Seats[0];
 
             Vector3 centre = Vector3.zero;
             for (int i = 0; i < playerLayout.Seats.Count; i++)

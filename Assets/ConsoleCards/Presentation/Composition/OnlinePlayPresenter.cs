@@ -935,12 +935,7 @@ namespace ConsoleCards.Presentation.Composition
                     ReadNotice(data);
                     break;
                 case MsgRoomClosing:
-                    if (hosting) break;
-                    if (!privateGuest && !sharedTable && members.Count >= 2)
-                    {
-                        break; // MP-5: a room that is not a shared table gets a new host (HostMayHaveLeft)
-                    }
-
+                    if (hosting) break; // NO-TAKEOVER: every guest leaves when the host closes the room
                     // HOST-CLOSE: the room is going; the session ends here (a shared table freezes: "The host left the room").
                     Debug.Log("[Online] The host is closing the room: leaving it (no reconnect tries).");
                     hostClosedRoom = true;
