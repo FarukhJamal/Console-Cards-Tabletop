@@ -239,6 +239,7 @@ namespace ConsoleCards.Presentation.Composition
         // This computer now hosts the room it was in: the players stay, the table goes on from this computer's copy.
         private void TookOverRoom()
         {
+            roomClosingSent = false; // HOST-CLOSE: this computer hosts now
             if (privateGuest)
             {
                 // PRIVACY-P4 guard: a filtered client must never be promoted to host.

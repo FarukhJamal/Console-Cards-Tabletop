@@ -525,15 +525,36 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (floorTilesBeforeDeal.Count == 0) return;
             var starts = new Dictionary<Transform, ConsoleCards.Presentation.Interaction.TabletopTransformSnapshot>(floorTilesBeforeDeal.Count);
+            int captured = floorTilesBeforeDeal.Count;
+            int glided = 0;
             foreach (KeyValuePair<TabletopObjectId, ConsoleCards.Presentation.Interaction.TabletopTransformSnapshot> pair in floorTilesBeforeDeal)
             {
-                if (host.Registry.TryGetCardView(pair.Key, out CardView view) && view != null) starts[view.transform] = pair.Value;
+                if (!host.Registry.TryGetCardView(pair.Key, out CardView view) || view == null) continue;
+                // FLOOR-GLIDE-PHYS (owner, 2026-11-27: "floor-end glide" first): a loose tile's transform belongs to its
+                // physics body, and the transition controller skips such pieces (PhysicalOwns), so every loose tile popped
+                // to the new floor. The body glides itself (kinematic, no collisions while it moves), a little after the one
+                // before it, so the floor is seen to be laid out again.
+                if (view.PhysicalObject != null && view.PhysicalObject.OwnsLooseTransform)
+                {
+                    view.PhysicalObject.GlideFrom(pair.Value.Position, pair.Value.Rotation, NextFloorGlideSeconds, 0f,
+                        Mathf.Min(glided * NextFloorGlideStagger, NextFloorGlideMaxStagger));
+                    glided++;
+                }
+                else
+                {
+                    starts[view.transform] = pair.Value;
+                }
             }
 
             floorTilesBeforeDeal.Clear();
+            Debug.Log($"[Floor] Next floor: {glided + starts.Count} of {captured} tile(s) glide to their new places.");
             if (starts.Count > 0 && host.presentationTransitions != null)
                 host.presentationTransitions.AnimateCardsFromCurrentResults(starts, 0.5f, 0.06f);
         }
+
+        private const float NextFloorGlideSeconds = 0.55f;
+        private const float NextFloorGlideStagger = 0.025f;
+        private const float NextFloorGlideMaxStagger = 0.4f;
 
         // Sets the table up again at the given floor (0 = a new game at full size, or the start of stage
         // <paramref name="stageIndex"/>), keeping the mode and seats.

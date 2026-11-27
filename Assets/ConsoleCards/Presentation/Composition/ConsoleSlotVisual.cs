@@ -18,6 +18,13 @@ namespace ConsoleCards.Presentation.Composition
         // PINK-1 (owner, 2026-11-26): the slot's "source" look renders as a solid magenta block (see SLOT-HINT in TabletopComposition.Consoles.cs).
         // Off until the source feedback material in the Console slot prefab is fixed; then tick this.
         [SerializeField] private bool showSourceLook;
+        // PINK-2 (owner, 2026-11-27): root cause: the prefab's SourceTargetFeedbackRoot uses SelectionHighlight.mat, whose
+        // colour IS magenta (0.95, 0.08, 0.90), not a broken shader. The source look is now drawn in this colour through a
+        // property block (no prefab edit, no new material); the valid (green) and refused (red) looks are unchanged.
+        [SerializeField] private Color sourceLookColour = new Color(0.95f, 0.72f, 0.25f, 1f);
+        private bool sourceLookTinted;
+        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int ColorId = Shader.PropertyToID("_Color");
 
         public ConsoleSlotView SlotView => slotView;
 
@@ -70,7 +77,22 @@ namespace ConsoleCards.Presentation.Composition
         public void ShowSourceTarget()
         {
             // PINK-1: lifting a card out of a Console slot (and hovering back over it) made the slot turn pink.
-            SetFeedback(showSourceLook ? sourceTargetFeedbackRoot : null);
+            SetFeedback(showSourceLook || TintSourceLook() ? sourceTargetFeedbackRoot : null);
+        }
+
+        // PINK-2: once per slot (not per frame): every renderer of the source look takes sourceLookColour.
+        private bool TintSourceLook()
+        {
+            if (sourceLookTinted) return true;
+            if (sourceTargetFeedbackRoot == null) return false;
+            Renderer[] renderers = sourceTargetFeedbackRoot.GetComponentsInChildren<Renderer>(true);
+            if (renderers.Length == 0) return false;
+            MaterialPropertyBlock block = new MaterialPropertyBlock();
+            block.SetColor(BaseColorId, sourceLookColour);
+            block.SetColor(ColorId, sourceLookColour);
+            for (int i = 0; i < renderers.Length; i++) renderers[i].SetPropertyBlock(block);
+            sourceLookTinted = true;
+            return true;
         }
 
         public void ShowInvalidTarget()

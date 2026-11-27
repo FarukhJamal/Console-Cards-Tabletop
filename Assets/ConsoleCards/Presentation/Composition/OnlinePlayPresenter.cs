@@ -42,6 +42,10 @@ namespace ConsoleCards.Presentation.Composition
         private const byte MsgCheck = 12;
         private const byte MsgDeal = 13;
         private const byte MsgBye = 14;
+        // HOST-CLOSE (owner, 2026-11-27): host → guests: the host is closing the room on purpose (left it, quit, or Play
+        // mode ended), so a guest ends the session at once instead of trying to get back into a room that is gone (that
+        // try ended in Fusion's red "StartGame Failed: GameNotFound" on every guest).
+        private const byte MsgRoomClosing = 30;
         private const byte MsgContent = 15; // MP-4: the host's game saves (not numbered: it can be large)
         private const byte MsgUndo = 16; // MP-5: a joined player's Undo / Redo, run by the host
         private const byte MsgNotice = 17; // MP-5: a line from the host for one player
@@ -296,6 +300,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             Connect();
             notice = null;
+            roomClosingSent = false; // HOST-CLOSE
             session.CreateRoom(new OnlineRoomOptions
             {
                 Title = string.IsNullOrWhiteSpace(title) ? DefaultRoomTitle() : title,
@@ -318,6 +323,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             Connect();
             notice = null;
+            hostClosedRoom = false;
             session.JoinRoom(code);
         }
 
@@ -325,6 +331,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (session == null || !InRoom) return;
             if (!hosting) SendSmall(MsgBye);
+            else TellGuestsRoomClosing();
             session.LeaveRoom();
         }
 
@@ -391,19 +398,45 @@ namespace ConsoleCards.Presentation.Composition
         // knows at once instead of waiting for the transport to notice.
         private void SayGoodbyeOnQuit()
         {
-            if (session == null || !InRoom || hosting || goodbyeSent) return;
+            if (session == null || !InRoom) return;
+            if (hosting)
+            {
+                TellGuestsRoomClosing();
+                return;
+            }
+
+            if (goodbyeSent) return;
             goodbyeSent = true;
             SendSmall(MsgBye);
             Debug.Log("[Online] Leaving: told the host this window is closing.");
         }
 
         private bool goodbyeSent;
+        private bool roomClosingSent;
+        private bool hostClosedRoom; // HOST-CLOSE: this guest's host said it was closing the room
+
+        // HOST-CLOSE: the host tells every guest it is closing the room while the connection is still open (best effort,
+        // like a guest's Bye: a crash or a lost connection still ends with the guest's reconnect tries).
+        private void TellGuestsRoomClosing()
+        {
+            if (session == null || !InRoom || !hosting || roomClosingSent) return;
+            roomClosingSent = true;
+            BeginMessage(MsgRoomClosing);
+            for (int i = 0; i < members.Count; i++)
+            {
+                Member member = members[i];
+                if (!member.IsHost && member.Connected && member.Connection >= 0) SendTo(member);
+            }
+
+            Debug.Log("[Online] Closing the room: told the guests.");
+        }
 
         /// <summary>The game's scene is closing (a profile switch reloads it): leave the room cleanly.</summary>
         internal void Dispose()
         {
             if (session == null) return;
             if (InRoom && !hosting) SendSmall(MsgBye);
+            else if (InRoom) TellGuestsRoomClosing(); // HOST-CLOSE
             session.Disconnect(); // the scene is going (Play mode ends, or a profile switch reloads it): no reconnecting
             ContentPackStore.RoomRoot = null; // MP-4: the next scene reads the profile's own saves
             ContentPackStore.RoomIsOwn = false;
@@ -900,6 +933,19 @@ namespace ConsoleCards.Presentation.Composition
                     break;
                 case MsgNotice:
                     ReadNotice(data);
+                    break;
+                case MsgRoomClosing:
+                    if (hosting) break;
+                    if (!privateGuest && !sharedTable && members.Count >= 2)
+                    {
+                        break; // MP-5: a room that is not a shared table gets a new host (HostMayHaveLeft)
+                    }
+
+                    // HOST-CLOSE: the room is going; the session ends here (a shared table freezes: "The host left the room").
+                    Debug.Log("[Online] The host is closing the room: leaving it (no reconnect tries).");
+                    hostClosedRoom = true;
+                    notice = "The host closed the room.";
+                    session.LeaveRoom();
                     break;
                 case MsgKick:
                     {

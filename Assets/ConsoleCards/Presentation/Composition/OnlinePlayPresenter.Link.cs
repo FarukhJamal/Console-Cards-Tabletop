@@ -96,6 +96,8 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             MultiplayerLeaveReason reason = session != null ? session.LastLeaveReason : MultiplayerLeaveReason.ConnectionFailed;
+            if (hostClosedRoom) reason = MultiplayerLeaveReason.HostClosedRoom; // HOST-CLOSE: we left because the host closed it
+            hostClosedRoom = false;
             if (reason == MultiplayerLeaveReason.LeftOnPurpose)
             {
                 link.Reset();
