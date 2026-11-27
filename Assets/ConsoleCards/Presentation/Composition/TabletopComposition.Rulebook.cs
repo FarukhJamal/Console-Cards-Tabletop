@@ -183,11 +183,24 @@ namespace ConsoleCards.Presentation.Composition
             {
                 if (rulebookMovedTo.HasValue) position = rulebookMovedTo.Value; // where the player put it
                 rulebookObject.PlaceOnTable(position, rotation);
+                rulebookPlacedAt = position;
+                if (HasOnline) Online.ShareRulebookSpot(); // BOOK-SYNC-2: the host's spot is the table's spot
             }
         }
 
         // Owner, 2026-11-03: the book can be carried (hold it, or drag it); it stays where it was put on this table.
         private Vector3? rulebookMovedTo;
+
+        // BOOK-SYNC-2 (owner, 2026-11-28: "the issue with the rulebook is still the same"): each screen worked out the
+        // first spot itself (its board, Consoles and camera differ while it loads), and a guest that joined or rebuilt
+        // after a move never heard of it. The host now sends where its book lies with every table and each placing.
+        private Vector3? rulebookPlacedAt;
+
+        internal bool TryGetRulebookSpot(out Vector3 spot)
+        {
+            spot = rulebookMovedTo ?? rulebookPlacedAt ?? Vector3.zero;
+            return rulebookMovedTo.HasValue || rulebookPlacedAt.HasValue;
+        }
 
         // BOOK-SYNC (owner, 2026-11-27: "the rulebook placement is not the same on every screen"): the table has one
         // rulebook. Where a player puts it down goes to the others, and they put theirs there too.

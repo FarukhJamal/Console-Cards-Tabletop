@@ -60,6 +60,36 @@ namespace ConsoleCards.Presentation.Composition
             SendLive();
         }
 
+        /// <summary>BOOK-SYNC-2: the host tells one guest (or all, with null) where the table's rulebook lies, so every
+        /// screen shows it where the host's is. Sent with every table and whenever the host's book is laid down.</summary>
+        internal void ShareRulebookSpot() => SendRulebookSpot(null);
+
+        private void SendRulebookSpot(Member only)
+        {
+            if (!hosting || session == null || session.State != MultiplayerSessionState.InRoom) return;
+            if (!host.TryGetRulebookSpot(out Vector3 spot)) return;
+            if (only == null)
+            {
+                if (sentRulebookSpot.HasValue && sentRulebookSpot.Value == spot) return; // nothing new for anyone
+                sentRulebookSpot = spot;
+            }
+
+            BeginMessage(MsgLive);
+            writer.Write(LiveRulebook);
+            WriteGuid(host.localPlayerId.Value);
+            WriteVector(spot);
+            Flush();
+            for (int i = 0; i < members.Count; i++)
+            {
+                Member member = members[i];
+                if (member.IsHost || !member.Connected || member.Connection < 0) continue;
+                if (only != null && member != only) continue;
+                session.SendTo(member.Connection, outStream.GetBuffer(), 0, (int)outStream.Length);
+            }
+        }
+
+        private Vector3? sentRulebookSpot;
+
         /// <summary>CHAT-1: a message written here (already cleaned); the words are never logged.</summary>
         internal void SendChat(PlayerId player, string text)
         {
@@ -306,6 +336,23 @@ namespace ConsoleCards.Presentation.Composition
 
         private void ApplyLive(byte[] data)
         {
+            // BOOK-SYNC-2: the book's spot is kept even while the table is still being laid; the book goes there when
+            // it appears.
+            if (data.Length >= 30 && data[1] == LiveRulebook)
+            {
+                try
+                {
+                    BinaryReader book = Reader(data);
+                    book.ReadByte();
+                    book.ReadByte();
+                    ReadGuid(book);
+                    host.ShowRemoteRulebookMove(ReadVector(book));
+                }
+                catch (EndOfStreamException) { }
+
+                return;
+            }
+
             if (!sharedTable || applying || !host.IsInitialized)
             {
                 if (data.Length > 1 && data[1] == LivePing) Debug.Log($"[Online] Ping dropped (shared {sharedTable}, applying {applying}).");

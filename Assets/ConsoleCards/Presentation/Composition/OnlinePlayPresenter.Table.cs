@@ -955,6 +955,7 @@ namespace ConsoleCards.Presentation.Composition
             Flush();
             SendPrepared(member);
             SendGameBoardGrid(member); // P-2a: the board grid is part of the table's setup
+            SendRulebookSpot(member); // BOOK-SYNC-2: and where the table's rulebook lies
         }
 
         private void BroadcastTable(Member except)
@@ -966,6 +967,11 @@ namespace ConsoleCards.Presentation.Composition
             writer.Write(payload);
             BroadcastPrepared(except);
             if (hosting) BroadcastGameBoardGrid(); // P-2a: the board grid is part of the table's setup
+            if (hosting)
+            {
+                sentRulebookSpot = null; // BOOK-SYNC-2: every table carries the book's spot
+                SendRulebookSpot(null);
+            }
             if (hosting && resetReadyAfterTable && except == null)
             {
                 // READY-FLICKER: the next game asks again; the guests are at the table already when this roster comes.
