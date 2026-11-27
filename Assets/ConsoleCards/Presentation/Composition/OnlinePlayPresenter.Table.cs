@@ -218,7 +218,10 @@ namespace ConsoleCards.Presentation.Composition
             if (me != null) myPlayer = me.Player;
             roomGame = gameName ?? string.Empty;
             roomStarted = true;
-            for (int i = 0; i < members.Count; i++) members[i].Ready = members[i].IsHost; // the next game asks again
+            // READY-FLICKER (owner, 2026-11-28: "the ready state goes to unready, then ready again, then it enters the table"):
+            // the READY marks were cleared here and the roster saying so reached the guests before the table did, so their
+            // button switched while they waited. They are cleared once the new table has been sent (BroadcastTable).
+            resetReadyAfterTable = true;
             if (PrivateDevSession.Enabled && StartPrivateHosting())
             {
                 BroadcastRoster(); // PRIVACY-P4: seats as usual; no sharing, no content push, no table
@@ -963,7 +966,16 @@ namespace ConsoleCards.Presentation.Composition
             writer.Write(payload);
             BroadcastPrepared(except);
             if (hosting) BroadcastGameBoardGrid(); // P-2a: the board grid is part of the table's setup
+            if (hosting && resetReadyAfterTable && except == null)
+            {
+                // READY-FLICKER: the next game asks again; the guests are at the table already when this roster comes.
+                resetReadyAfterTable = false;
+                for (int i = 0; i < members.Count; i++) members[i].Ready = members[i].IsHost;
+                BroadcastRoster();
+            }
         }
+
+        private bool resetReadyAfterTable;
 
         private void PushTableToHost()
         {
