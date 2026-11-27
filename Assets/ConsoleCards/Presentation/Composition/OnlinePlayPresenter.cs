@@ -406,6 +406,7 @@ namespace ConsoleCards.Presentation.Composition
             if (InRoom && !hosting) SendSmall(MsgBye);
             session.Disconnect(); // the scene is going (Play mode ends, or a profile switch reloads it): no reconnecting
             ContentPackStore.RoomRoot = null; // MP-4: the next scene reads the profile's own saves
+            RoomContentFiles.Clear(); // ROOM-MEM
             if (subscribed)
             {
                 session.Changed -= OnSessionChanged;
@@ -1339,6 +1340,7 @@ namespace ConsoleCards.Presentation.Composition
             model.NotReady = notReady;
             // SEC-3 UI (owner, 2026-11-05): a computer refused the table says why, instead of "Waiting for the host to start".
             if (!sharedTable && !string.IsNullOrEmpty(watchNotice)) model.Waiting = watchNotice;
+            else if (!hosting && !sharedTable && contentStatus.Length > 0) model.Waiting = contentStatus; // LOBBY-PROGRESS (owner, 2026-11-27)
             return model;
         }
 

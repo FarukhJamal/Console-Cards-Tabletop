@@ -226,7 +226,7 @@ namespace ConsoleCards.Presentation.Art
         /// Makes a texture from PNG or JPG bytes (for packs and uploads). Null when the bytes are not a picture.
         /// The caller passes it to <see cref="Set"/> with ownership, or destroys it.
         /// </summary>
-        public static Texture2D LoadTexture(byte[] bytes, string key)
+        public static Texture2D LoadTexture(byte[] bytes, string key, bool gpuCompress = false)
         {
             if (bytes == null || bytes.Length == 0)
             {
@@ -243,6 +243,14 @@ namespace ConsoleCards.Presentation.Art
             {
                 UnityEngine.Object.Destroy(texture);
                 return null;
+            }
+
+            // GPU-COMPRESS (owner, 2026-11-27): a host's picture in a room is kept compressed for the graphics card (a
+            // quarter of the memory); it stays readable. Only a size that is a multiple of 4 can be compressed.
+            if (gpuCompress && texture.width % 4 == 0 && texture.height % 4 == 0)
+            {
+                texture.Compress(true);
+                texture.Apply(false);
             }
 
             return texture;

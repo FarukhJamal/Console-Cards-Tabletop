@@ -204,7 +204,7 @@ namespace ConsoleCards.Presentation.Content
                 message = "Built-in art is on.";
             }
 
-            if (game != null)
+            if (game != null && !Store.IsRoom) // ROOM-MEM: the host's settings are never written here
             {
                 // Only the pack changes; other choices in the file (the deck to play with) are kept.
                 ContentSettings settings = Store.LoadSettings(GameId);
@@ -233,6 +233,12 @@ namespace ConsoleCards.Presentation.Content
         public bool SetUpload(string key, string sourcePath, out string message)
         {
             string normalized = ArtLibrary.NormalizeKey(key);
+            if (Store.IsRoom)
+            {
+                message = ContentIO.ReadOnlyMessage; // NO-KEEP (owner, 2026-11-27)
+                return false;
+            }
+
             if (game == null || normalized.Length == 0)
             {
                 message = "There is no picture to replace here.";
@@ -276,6 +282,12 @@ namespace ConsoleCards.Presentation.Content
         public bool RemoveUpload(string key, out string message)
         {
             string normalized = ArtLibrary.NormalizeKey(key);
+            if (Store.IsRoom)
+            {
+                message = ContentIO.ReadOnlyMessage; // NO-KEEP
+                return false;
+            }
+
             ContentArtFile entry = FindUpload(normalized);
             if (entry == null)
             {
@@ -298,7 +310,7 @@ namespace ConsoleCards.Presentation.Content
         {
             ContentArtFile entry = FindUpload(ArtLibrary.NormalizeKey(key));
             path = entry != null && game != null ? Path.Combine(Store.UploadsFolder(GameId), entry.file) : string.Empty;
-            return path.Length > 0 && File.Exists(path);
+            return path.Length > 0 && !ContentIO.IsRoomPath(path) && File.Exists(path); // NO-KEEP: the host's pictures are not handed out
         }
 
         /// <summary>Where the picture for this key comes from now, in words for the panel.</summary>
@@ -415,7 +427,7 @@ namespace ConsoleCards.Presentation.Content
 
             byte[] bytes = ContentPackStore.ReadPicture(folder, file.file, out error);
             if (bytes == null) return false;
-            Texture2D texture = ArtLibrary.LoadTexture(bytes, key);
+            Texture2D texture = ArtLibrary.LoadTexture(bytes, key, ContentIO.IsRoomPath(folder)); // GPU-COMPRESS: the room's pictures only
             if (texture == null)
             {
                 error = $"'{file.file}' is not a PNG or JPG picture";

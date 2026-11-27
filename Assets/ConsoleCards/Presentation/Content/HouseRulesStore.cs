@@ -97,8 +97,8 @@ namespace ConsoleCards.Presentation.Content
         {
             List<HouseRuleSetRecord> records = new List<HouseRuleSetRecord>();
             string folder = RulesFolder(gameId);
-            if (!Directory.Exists(folder)) return records;
-            string[] files = Directory.GetFiles(folder, "*.json");
+            if (!ContentIO.DirectoryExists(folder)) return records; // ROOM-MEM: also reads the host's rules from memory
+            string[] files = ContentIO.GetFiles(folder, "*.json", SearchOption.TopDirectoryOnly);
             for (int i = 0; i < files.Length; i++)
             {
                 try

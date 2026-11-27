@@ -116,6 +116,12 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void OpenGameSave(bool fromCreate)
         {
+            if (ContentPackStore.InSomeoneElsesRoom)
+            {
+                host.ShowNotice(ContentIO.ReadOnlyMessage); // NO-KEEP (owner, 2026-11-27): the table in a room is made of the host's cards
+                return;
+            }
+
             closeGameSaveToCreate = fromCreate;
             PlayerGameFile from = activePlayerGame;
             saveName = from != null ? from.name : "My game";
@@ -226,6 +232,12 @@ namespace ConsoleCards.Presentation.Composition
         internal void SavePlayerGame(GameSaveTyped typed, bool over, bool template = false)
         {
             KeepTyped(typed);
+            if (ContentPackStore.InSomeoneElsesRoom) // NO-KEEP
+            {
+                ShowGameSave(ContentIO.ReadOnlyMessage);
+                return;
+            }
+
             if (over && activeIsDraft)
             {
                 ShowGameSave("This game is not saved yet: use SAVE AS NEW."); // doc 63 T1 (owner, 2026-11-21)

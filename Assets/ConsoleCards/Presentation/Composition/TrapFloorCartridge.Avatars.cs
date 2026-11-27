@@ -347,7 +347,9 @@ namespace ConsoleCards.Presentation.Composition
         // AVATAR-FIRST (owner, 2026-11-26): a joined computer tells the others (the host first) that its player pressed Later.
         private void TellHostAvatarLater(PlayerId player)
         {
-            if (!(host.HasOnline && host.Online.IsJoinedSharedClient) || !host.IsPlayerOnThisComputer(player)) return;
+            // AVATAR-BAR (two-copy test, 2026-11-27): the host's own Later goes to the room too, so a joined computer knows every
+            // seat has answered (its bar and Buy actions waited for an answer it was never told).
+            if (!host.IsOnlineTable || !host.IsPlayerOnThisComputer(player)) return;
             host.TableAuthority.Submit<TrapFloorAvatarLaterCommand, TrapFloorEffectResult>(
                 new TrapFloorAvatarLaterCommand(host.CreateCommandContext(player)));
         }
@@ -373,6 +375,9 @@ namespace ConsoleCards.Presentation.Composition
             if (host.HasOnline && (host.Online.IsPrivateGuest || host.Online.TableIsStale)) return false;
             // A joined computer is also released by the host's deal (the dealt flag travels with the table).
             if (!IsDealingComputer && turn.IsBuyPhaseDealt) return false;
+            // AVATAR-BAR (two-copy test, 2026-11-27): the dealt flag reaches a joined computer only with the next whole table, so
+            // its bar kept "CHOOSE AVATARS FIRST" with the cards dealt. The host's deal is seen in the hands it filled.
+            if (!IsDealingComputer && BuyPhaseHandsDealt()) return false;
             if (!host.matchState.Containers.TryGetValue(TrapFloorTemplateFactory.AvatarDeckId, out ContainerState pile) || pile.Count == 0) return false;
             if (!ReferenceEquals(avatarDraftMatch, host.matchState)) return true; // the draft has not looked at this table yet
             int seats = Math.Min(host.trapFloorTemplate.Players.Count, MaxAvatarSeats);
@@ -381,6 +386,18 @@ namespace ConsoleCards.Presentation.Composition
                 TrapFloorPlayerSetupDefinition setup = host.trapFloorTemplate.Players[i];
                 if (!host.matchState.Seats.TryGetValue(setup.SeatId, out SeatState seat) || seat.OccupantPlayerId.IsEmpty) continue;
                 if (!avatarDraftLater.Contains(seat.OccupantPlayerId) && !TryGetSeatAvatar(setup, out _)) return StillWaitingForAvatars(seat.OccupantPlayerId);
+            }
+
+            return false;
+        }
+
+        // AVATAR-BAR: true when a seat's hand holds cards (the Buy Phase deal of round 1 has been played here). No allocation.
+        private bool BuyPhaseHandsDealt()
+        {
+            for (int i = 0; i < host.trapFloorTemplate.Players.Count; i++)
+            {
+                ContainerId hand = host.trapFloorTemplate.Players[i].HandContainerId;
+                if (!hand.IsEmpty && host.matchState.Containers.TryGetValue(hand, out ContainerState cards) && cards.Count > 0) return true;
             }
 
             return false;

@@ -207,6 +207,7 @@ namespace ConsoleCards.Networking
                 GameMode = mode,
                 SessionName = roomCode,
                 CustomPhotonAppSettings = Settings(roomRegion),
+                Config = RoomConfig(),
             };
             if (mode == GameMode.Host)
             {
@@ -465,6 +466,30 @@ namespace ConsoleCards.Networking
             }
 
             _ = ConnectToLobbyAsync(++attempt);
+        }
+
+        // CONTENT-SPEED (measured 2026-11-27: the room's content reached a guest at about 31 KB/s, 10% of 48 MB in 156 s):
+        // Fusion sends one reliable packet per connection per network send by default, and the content, tables and
+        // commands all travel as reliable data. More reliable packets per send drain that backlog faster. A copy of the
+        // project's config is used so the asset itself never changes (in the editor, editing Global would save it).
+        private const int ReliablePacketsPerSend = 16;
+        private static NetworkProjectConfig roomConfig;
+
+        private static NetworkProjectConfig RoomConfig()
+        {
+            if (roomConfig != null) return roomConfig;
+            try
+            {
+                NetworkProjectConfig copy = NetworkProjectConfig.Deserialize(NetworkProjectConfig.Serialize(NetworkProjectConfig.Global));
+                if (copy.Network.GameReliableChannelSendCount < ReliablePacketsPerSend) copy.Network.GameReliableChannelSendCount = ReliablePacketsPerSend;
+                roomConfig = copy;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning("[Online] The room's network settings could not be prepared; the defaults are used: " + exception.Message);
+            }
+
+            return roomConfig;
         }
 
         private static FusionAppSettings Settings(string fixedRegion)

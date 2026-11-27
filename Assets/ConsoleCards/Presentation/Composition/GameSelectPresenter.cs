@@ -850,6 +850,7 @@ namespace ConsoleCards.Presentation.Composition
             if (entry.PlayerGame != null)
             {
                 // MP-4: a game you made is played online too: the room gets your content and your table.
+                if (online) host.Online.NoteTableContent(TableContentNeeds.ForPlayerGame(entry.PlayerGame, host.Cartridges.DefaultGame)); // TABLE-ONLY
                 if (online && !host.Online.PrepareHostedStart(ChosenPlayerCount(entry), entry.Name, out string notReady))
                 {
                     ShowGameSelect(notReady, entries);
@@ -877,10 +878,12 @@ namespace ConsoleCards.Presentation.Composition
                 : entry.Templates[Mathf.Clamp(gameSelectModeIndex, 0, entry.Templates.Count - 1)];
             pendingDeckCards = null;
             pendingDeckName = string.Empty;
+            DeckChoice tableDeck = null; // TABLE-ONLY: the deck an Empty Table starts with
             if (entry.Game == null)
             {
                 List<DeckChoice> choices = DeckChoices(entry);
                 DeckChoice choice = choices[Mathf.Clamp(emptyTableDeckIndex, 0, choices.Count - 1)];
+                tableDeck = choice;
                 if (choice.Deck != null)
                 {
                     pendingDeckCards = DeckCardIds(choice.Deck);
@@ -919,6 +922,9 @@ namespace ConsoleCards.Presentation.Composition
             if (online)
             {
                 int seats = entry.Game == null ? host.Online.MemberCount : ChosenPlayerCount(entry);
+                host.Online.NoteTableContent(entry.Game != null
+                    ? TableContentNeeds.ForGame(entry.Game)
+                    : TableContentNeeds.ForDeck(host.Cartridges.DefaultGame, tableDeck?.Game, tableDeck != null ? tableDeck.Id : string.Empty)); // TABLE-ONLY
                 if (!host.Online.PrepareHostedStart(seats, entry.Name, out string problem))
                 {
                     ShowGameSelect(problem, entries);

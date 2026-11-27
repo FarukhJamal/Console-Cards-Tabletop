@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using ConsoleCards.GameTemplates;
+using ConsoleCards.Presentation.Content;
 using ConsoleCards.Presentation.Saving;
 using ConsoleCards.Presentation.UI;
 using UnityEngine;
@@ -42,6 +43,12 @@ namespace ConsoleCards.Presentation.Composition
         private void SaveProgress()
         {
             ContextMenus.CloseContextMenu();
+            if (ContentPackStore.InSomeoneElsesRoom)
+            {
+                ShowMessage(ContentIO.ReadOnlyMessage); // NO-KEEP (owner, 2026-11-27): a save would keep the host's table and cards
+                return;
+            }
+
             if (WriteSave(null, out string result))
             {
                 runtimeUi?.ShowTableNews($"Saved: {result}", FeedbackColour(localPlayerId));
@@ -59,6 +66,12 @@ namespace ConsoleCards.Presentation.Composition
             if (activeSession == null || matchState == null)
             {
                 result = "there is no table yet";
+                return false;
+            }
+
+            if (ContentPackStore.InSomeoneElsesRoom) // NO-KEEP
+            {
+                result = ContentIO.ReadOnlyMessage;
                 return false;
             }
 
@@ -221,6 +234,7 @@ namespace ConsoleCards.Presentation.Composition
             if (now < nextAutoSaveAt) return;
             nextAutoSaveAt = now + AutoSaveSeconds;
             if (rebuildingFromUndo || activeSession == null || (IsOnlineTable && !Online.IsHosting)) return;
+            if (ContentPackStore.InSomeoneElsesRoom) return; // NO-KEEP: no auto-save of a table made from the host's content
             if (interactionRouter != null && interactionRouter.HasActiveInteraction)
             {
                 nextAutoSaveAt = now + 20f; // not mid-move: soon after

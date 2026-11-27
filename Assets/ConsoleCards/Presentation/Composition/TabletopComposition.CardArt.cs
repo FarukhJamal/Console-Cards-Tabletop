@@ -172,6 +172,12 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            if (ContentPackStore.InSomeoneElsesRoom)
+            {
+                ShowNotice(ContentIO.ReadOnlyMessage); // NO-KEEP (owner, 2026-11-27): the panel would change the host's copy
+                return;
+            }
+
             EnsureContentArt();
             if (!contentArt.HasGame)
             {
@@ -240,6 +246,12 @@ namespace ConsoleCards.Presentation.Composition
         private void OpenArtPacksFolder()
         {
             string folder = contentArt.Store.PacksFolder(contentArt.GameId);
+            if (contentArt.Store.IsRoom) // NO-KEEP: the host's content is in memory; there is no folder to open or fill
+            {
+                ShowCardArtPanel(ContentIO.ReadOnlyMessage);
+                return;
+            }
+
             try
             {
                 System.IO.Directory.CreateDirectory(folder);

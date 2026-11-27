@@ -63,7 +63,7 @@ namespace ConsoleCards.Presentation.Composition
                 if (file == null || ArtLibrary.NormalizeKey(file.key) != key) continue;
                 byte[] bytes = ContentPackStore.ReadPicture(store.UploadsFolder(gameId), file.file, out string error);
                 if (bytes == null) Debug.LogWarning($"[Content] The title picture for {key}: {error}");
-                return bytes != null ? ArtLibrary.LoadTexture(bytes, key) : null;
+                return bytes != null ? ArtLibrary.LoadTexture(bytes, key, store.IsRoom) : null;
             }
 
             return null;
@@ -154,7 +154,7 @@ namespace ConsoleCards.Presentation.Composition
         private static Texture2D LoadMadeCoverFrom(ContentPackStore store, string file)
         {
             string folder = store.UploadsFolder(PlayerLibrary.Id);
-            if (!File.Exists(Path.Combine(folder, file))) return null;
+            if (!ContentIO.FileExists(Path.Combine(folder, file))) return null; // ROOM-MEM
             byte[] bytes = ContentPackStore.ReadPicture(folder, file, out string error);
             if (bytes == null)
             {
@@ -162,7 +162,7 @@ namespace ConsoleCards.Presentation.Composition
                 return null;
             }
 
-            return ArtLibrary.LoadTexture(bytes, "your-game-cover");
+            return ArtLibrary.LoadTexture(bytes, "your-game-cover", store.IsRoom); // GPU-COMPRESS
         }
 
         // The first card of a made game's deck: a deck of yours (or one of its parts), or a game's own deck.

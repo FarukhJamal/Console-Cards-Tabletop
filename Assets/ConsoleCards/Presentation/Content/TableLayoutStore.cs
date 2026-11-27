@@ -83,7 +83,7 @@ namespace ConsoleCards.Presentation.Content
         public TableLayoutRecord TryLoad(string gameId, int playerCount)
         {
             string path = LayoutPath(gameId, playerCount);
-            if (!File.Exists(path)) return null;
+            if (!ContentIO.FileExists(path)) return null; // ROOM-MEM
             try
             {
                 TableLayoutRecord record = ConsoleCards.Presentation.Saving.SaveFiles.ReadJson<TableLayoutRecord>(path, "Layout");
@@ -124,6 +124,12 @@ namespace ConsoleCards.Presentation.Content
             try
             {
                 string path = LayoutPath(gameId, playerCount);
+                if (ContentIO.Refuse(path)) // ROOM-MEM
+                {
+                    error = ContentIO.ReadOnlyMessage;
+                    return false;
+                }
+
                 if (File.Exists(path)) File.Delete(path);
                 return true;
             }

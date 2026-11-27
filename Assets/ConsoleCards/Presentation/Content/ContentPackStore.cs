@@ -37,6 +37,7 @@ namespace ConsoleCards.Presentation.Content
         private static void ForgetRoomRoot()
         {
             RoomRoot = null;
+            RoomContentFiles.Clear(); // ROOM-MEM: nothing of a host's is kept between runs
             movedProfileEdits = false;
         }
 
@@ -115,6 +116,12 @@ namespace ConsoleCards.Presentation.Content
 
         /// <summary>True while this computer sits in someone else's online room and reads the host's content.</summary>
         public static bool InSomeoneElsesRoom => !string.IsNullOrEmpty(RoomRoot);
+
+        /// <summary>
+        /// ROOM-MEM (owner, 2026-11-27): true when this store reads the host's content, which is held in memory only:
+        /// nothing can be written, copied or deleted in it.
+        /// </summary>
+        public bool IsRoom => ContentIO.IsRoomPath(RootFolder);
 
         /// <summary>
         /// Audit C-1 (owner, 2026-11-14): where this computer's own card and deck edits go, also while it is a guest in
@@ -223,12 +230,12 @@ namespace ConsoleCards.Presentation.Content
         {
             List<ContentPackInfo> packs = new List<ContentPackInfo>();
             string folder = PacksFolder(gameId);
-            if (!Directory.Exists(folder))
+            if (!ContentIO.DirectoryExists(folder))
             {
                 return packs;
             }
 
-            foreach (string packFolder in Directory.GetDirectories(folder))
+            foreach (string packFolder in ContentIO.GetDirectories(folder))
             {
                 if (TryReadManifest(packFolder, out ContentPackManifest manifest, out string error))
                 {
@@ -255,7 +262,7 @@ namespace ConsoleCards.Presentation.Content
         {
             manifest = null;
             string path = Path.Combine(packFolder, ContentPackManifest.FileName);
-            if (!File.Exists(path))
+            if (!ContentIO.FileExists(path))
             {
                 error = $"no {ContentPackManifest.FileName}";
                 return false;
@@ -263,7 +270,7 @@ namespace ConsoleCards.Presentation.Content
 
             try
             {
-                manifest = JsonUtility.FromJson<ContentPackManifest>(File.ReadAllText(path));
+                manifest = JsonUtility.FromJson<ContentPackManifest>(ContentIO.ReadAllText(path));
             }
             catch (Exception exception)
             {
@@ -322,6 +329,13 @@ namespace ConsoleCards.Presentation.Content
         public bool TryStoreUpload(string gameId, string key, string sourcePath, out string fileName, out string error)
         {
             fileName = string.Empty;
+            // ROOM-MEM (owner, 2026-11-27): the host's pictures are neither stored into nor copied out of the room's content.
+            if (ContentIO.Refuse(UploadsFolder(gameId)) || ContentIO.Refuse(sourcePath))
+            {
+                error = ContentIO.ReadOnlyMessage;
+                return false;
+            }
+
             string extension = Path.GetExtension(sourcePath ?? string.Empty).ToLowerInvariant();
             if (extension != ".png" && extension != ".jpg" && extension != ".jpeg")
             {
@@ -347,7 +361,9 @@ namespace ConsoleCards.Presentation.Content
                 string folder = UploadsFolder(gameId);
                 Directory.CreateDirectory(folder);
                 fileName = SafeName(key, "picture") + extension;
-                File.Copy(sourcePath, Path.Combine(folder, fileName), true);
+                string stored = Path.Combine(folder, fileName);
+                File.Copy(sourcePath, stored, true);
+                ContentShareCopy.AfterStore(stored, !IsGameData); // SHARE-COPY: ready before a room starts (not in the project's GameData)
                 error = string.Empty;
                 return true;
             }
@@ -361,9 +377,11 @@ namespace ConsoleCards.Presentation.Content
         public void DeleteUpload(string gameId, string fileName)
         {
             if (!TryResolveInside(UploadsFolder(gameId), fileName, out string path)) return;
+            if (ContentIO.Refuse(path)) return; // ROOM-MEM
             try
             {
                 if (File.Exists(path)) File.Delete(path);
+                ContentShareCopy.Delete(path); // SHARE-COPY
             }
             catch (Exception exception)
             {
@@ -382,21 +400,20 @@ namespace ConsoleCards.Presentation.Content
 
             try
             {
-                FileInfo info = new FileInfo(path);
-                if (!info.Exists)
+                if (!ContentIO.TryGetLength(path, out long length)) // ROOM-MEM: the room's pictures are read from memory
                 {
                     error = $"'{relativeFile}' is missing";
                     return null;
                 }
 
-                if (info.Length > MaximumPictureBytes)
+                if (length > MaximumPictureBytes)
                 {
                     error = $"'{relativeFile}' is larger than 16 MB";
                     return null;
                 }
 
                 error = string.Empty;
-                return File.ReadAllBytes(path);
+                return ContentIO.ReadAllBytes(path);
             }
             catch (Exception exception)
             {
@@ -411,6 +428,12 @@ namespace ConsoleCards.Presentation.Content
             ContentPackManifest manifest,
             IReadOnlyList<KeyValuePair<string, string>> keyToSourceFile)
         {
+            if (ContentIO.Refuse(packFolder)) return; // ROOM-MEM
+            for (int i = 0; i < keyToSourceFile.Count; i++)
+            {
+                if (ContentIO.Refuse(keyToSourceFile[i].Value)) return;
+            }
+
             Directory.CreateDirectory(packFolder);
             manifest.art = new List<ContentArtFile>(keyToSourceFile.Count);
             for (int i = 0; i < keyToSourceFile.Count; i++)
@@ -430,6 +453,12 @@ namespace ConsoleCards.Presentation.Content
         public bool TryImportPackFolder(string gameId, string sourceFolder, out string packId, out string error)
         {
             packId = string.Empty;
+            if (ContentIO.Refuse(sourceFolder) || ContentIO.Refuse(PacksFolder(gameId))) // ROOM-MEM
+            {
+                error = ContentIO.ReadOnlyMessage;
+                return false;
+            }
+
             if (!TryReadManifest(sourceFolder, out ContentPackManifest manifest, out error))
             {
                 return false;

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using ConsoleCards.Presentation.Content;
 using UnityEngine;
 
 namespace ConsoleCards.Presentation.Saving
@@ -20,10 +21,11 @@ namespace ConsoleCards.Presentation.Saving
         /// </summary>
         public static T ReadJson<T>(string path, string area) where T : class
         {
-            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
+            // ROOM-MEM (owner, 2026-11-27): a path under the host's room is read from memory, not from the disk.
+            if (string.IsNullOrEmpty(path) || !ContentIO.FileExists(path)) return null;
             try
             {
-                return JsonUtility.FromJson<T>(File.ReadAllText(path));
+                return JsonUtility.FromJson<T>(ContentIO.ReadAllText(path));
             }
             catch (Exception exception)
             {
@@ -39,6 +41,13 @@ namespace ConsoleCards.Presentation.Saving
             if (string.IsNullOrEmpty(path) || value == null)
             {
                 error = "nothing to save";
+                return false;
+            }
+
+            // ROOM-MEM (owner, 2026-11-27): the host's content is never written on this computer.
+            if (ContentIO.Refuse(path))
+            {
+                error = ContentIO.ReadOnlyMessage;
                 return false;
             }
 
@@ -84,6 +93,7 @@ namespace ConsoleCards.Presentation.Saving
         /// <summary>As <see cref="TryWriteJson"/>, with a console warning on failure.</summary>
         public static bool WriteJson(string path, object value, string area)
         {
+            if (ContentIO.Refuse(path)) return false; // ROOM-MEM: one warning, not two
             if (TryWriteJson(path, value, out string error)) return true;
             Debug.LogWarning($"[{area}] {path} could not be saved: {error}");
             return false;
@@ -93,6 +103,12 @@ namespace ConsoleCards.Presentation.Saving
         public static bool TryCopyFile(string source, string destination, out string error)
         {
             error = string.Empty;
+            if (ContentIO.Refuse(destination) || ContentIO.Refuse(source)) // ROOM-MEM: nothing of the host's is copied out
+            {
+                error = ContentIO.ReadOnlyMessage;
+                return false;
+            }
+
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(destination));
@@ -109,6 +125,7 @@ namespace ConsoleCards.Presentation.Saving
         /// <summary>Copies a whole folder, keeping files already at the destination (used once, to bring old saves in).</summary>
         public static void CopyFolderKeepingExisting(string source, string destination)
         {
+            if (ContentIO.Refuse(source) || ContentIO.Refuse(destination)) return; // ROOM-MEM
             if (!Directory.Exists(source)) return;
             Directory.CreateDirectory(destination);
             foreach (string file in Directory.GetFiles(source))
@@ -126,6 +143,7 @@ namespace ConsoleCards.Presentation.Saving
         /// <summary>True when files can be written in <paramref name="folder"/> (it is made if missing).</summary>
         public static bool CanWriteIn(string folder)
         {
+            if (ContentIO.IsRoomPath(folder)) return false; // ROOM-MEM
             try
             {
                 Directory.CreateDirectory(folder);
